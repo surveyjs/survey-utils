@@ -49,8 +49,9 @@ This command translates strings for the **survey-creator-core** library.
 ### 🧹 Unused-String Check
 
 ```bash
-./run_check_unused_strings_library.cmd   # survey-core
-./run_check_unused_strings_creator.cmd   # survey-creator-core
+./run_check_unused_strings_library.cmd     # survey-core
+./run_check_unused_strings_creator.cmd     # survey-creator-core
+./run_check_unused_strings_dashboard.cmd   # survey-analytics
 ```
 
 Reports localization keys that no product source reaches any more, and exits with code
@@ -202,18 +203,20 @@ interface IStringToTranslate {
 Finds translated strings that no longer reach the product, and fails CI when a newly
 added string is never used.
 
-Known products: **`library`** (survey-core) and **`creator`** (survey-creator-core).
+Known products: **`library`** (survey-core), **`creator`** (survey-creator-core),
+and **`dashboard`** (survey-analytics).
 
 ```bash
 npm run build
-npm run check:unused-strings library                # verdict + summary
+npm run check:unused-strings dashboard              # verdict + summary
 npm run check:unused-strings creator -- --list-dead # print the cleanup backlog
 npm run check:unused-strings                        # every known product
 ```
 
 ```
-library: 0 new unused string(s), 0 known dead, 0 dynamic exemption(s).
-creator: 0 new unused string(s), 0 known dead, 5 dynamic exemption(s).
+library:   0 new unused string(s), 0 known dead, 0 dynamic exemption(s).
+creator:   0 new unused string(s), 0 known dead, 5 dynamic exemption(s).
+dashboard: 0 new unused string(s), 0 known dead, 0 dynamic exemption(s).
 ```
 
 The five exemptions are `dynamic:` keys built at runtime (e.g. `getLocString("ed." + state)`).
@@ -226,10 +229,10 @@ allowlist entry rots, or when a dynamic namespace loses its resolver. Strings al
 recorded as `baseline:` are reported on every run but do **not** fail the build: they
 are a cleanup backlog, not a regression.
 
-**Prerequisite:** the product must be built. The linter reads the question types,
-serializer properties, logic types and themes from the *built bundle*
-(`survey-creator-core/build/survey-creator-core.js`), not from source. Build the
-product first, or the check aborts with an explanatory message.
+**Prerequisite (registry-backed products only):** `library` and `creator` read the
+question types, serializer properties, logic types and themes from the *built bundle*,
+not from source, so that product must be built first or the check aborts with an
+explanatory message. `dashboard` is purely static (see below) and needs no build.
 
 ### Why it is not just a grep
 
@@ -284,12 +287,13 @@ register it in `src/loc-lint/index.ts`:
 
 ```ts
 export const products: Record<string, () => LocLintProduct> = {
-  library: createLibraryProduct,   // survey-core
-  creator: createCreatorProduct,   // survey-creator-core
+  library: createLibraryProduct,     // survey-core
+  creator: createCreatorProduct,     // survey-creator-core
+  dashboard: createDashboardProduct, // survey-analytics
 };
 ```
 
-Two worked examples cover the two shapes:
+Three worked examples cover three shapes:
 
 - **`products/creator.ts`** — namespaced keys (`qt.*`, `pe.*`, …), one resolver per
   namespace, each backed by a live registry (`Serializer`, `ElementFactory`, grid
@@ -300,6 +304,12 @@ Two worked examples cover the two shapes:
   `@property({ localizable: { defaultStr: true } })` pattern, whose key is a bare
   property name the literal scan can't see). Nearly everything else is `literal`
   evidence, and the allowlist is empty.
+- **`products/dashboard.ts`** — survey-analytics is flat too, but its dynamic keys come
+  from Plotly-backed chart/visualizer registries that won't load under Node. So its
+  `"*"` resolver is *static*: `visualizer_<type>` / `chartType_<type>` / `<type>Download­Caption`
+  are matched by checking the suffix is a source literal (the type is always assigned as
+  a literal), while `intervalMode_<mode>` and `topNValueText<n>` are matched against
+  closed enum lists copied from source. No build, no runtime.
 
 A catch-all `"*"` resolver runs for any key whose first segment has no dedicated
 resolver — the right tool for flat-key products.

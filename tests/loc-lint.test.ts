@@ -163,6 +163,34 @@ test("a namespace resolver takes precedence over the catch-all", () => {
   expect(getEvidence("anything", new Set(), config)).toBe("resolver");
 });
 
+test("the dashboard resolver matches prefix families the way analytics builds keys", () => {
+  // Mirrors products/dashboard.ts: visualizer/chart/download suffixes are source
+  // literals; interval modes and top-N are closed enums.
+  const INTERVAL_MODES = new Set(["auto", "decades", "years", "quarters", "months", "days"]);
+  const TOP_N = new Set(["-1", "5", "10", "20"]);
+  const resolver = (key: string, _s: Array<string>, ctx: { literals: Set<string> }): boolean => {
+    if (key.startsWith("visualizer_")) return ctx.literals.has(key.slice("visualizer_".length));
+    if (key.startsWith("chartType_")) return ctx.literals.has(key.slice("chartType_".length));
+    if (key.endsWith("DownloadCaption")) return ctx.literals.has(key.slice(0, -"DownloadCaption".length));
+    if (key.startsWith("intervalMode_")) return INTERVAL_MODES.has(key.slice("intervalMode_".length));
+    if (key.startsWith("topNValueText")) return TOP_N.has(key.slice("topNValueText".length));
+    return false;
+  };
+  const config: LocLintConfig = { resolvers: { "*": resolver }, allowlist: {} };
+  // "matrix"/"scatter" are real types (appear as literals); "zzz" is not.
+  const literals = new Set(["matrix", "scatter", "pdf"]);
+  expect(getEvidence("visualizer_matrix", literals, config)).toBe("resolver");
+  expect(getEvidence("chartType_scatter", literals, config)).toBe("resolver");
+  expect(getEvidence("pdfDownloadCaption", literals, config)).toBe("resolver");
+  expect(getEvidence("intervalMode_years", literals, config)).toBe("resolver");
+  expect(getEvidence("topNValueText-1", literals, config)).toBe("resolver");
+  // The genuinely dead keys: not literals, not in the enums.
+  expect(getEvidence("chartType_zzz", literals, config)).toBe(null);
+  expect(getEvidence("intervalMode_default", literals, config)).toBe(null);
+  expect(getEvidence("intervalMode_custom", literals, config)).toBe(null);
+  expect(getEvidence("groupButton", literals, config)).toBe(null);
+});
+
 test("analyze ignores dynamic prefixes that are not locale namespaces", () => {
   const result = analyze([{ path: "ed.save", line: 1 }], new Set(["ed.save", "survey-core."]), emptyConfig);
   expect(result.unresolvedDynamicNamespaces).toEqual([]);
