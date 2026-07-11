@@ -49,7 +49,8 @@ This command translates strings for the **survey-creator-core** library.
 ### 🧹 Unused-String Check
 
 ```bash
-./run_check_unused_strings_creator.cmd
+./run_check_unused_strings_library.cmd   # survey-core
+./run_check_unused_strings_creator.cmd   # survey-creator-core
 ```
 
 Reports localization keys that no product source reaches any more, and exits with code
@@ -201,14 +202,17 @@ interface IStringToTranslate {
 Finds translated strings that no longer reach the product, and fails CI when a newly
 added string is never used.
 
+Known products: **`library`** (survey-core) and **`creator`** (survey-creator-core).
+
 ```bash
 npm run build
-npm run check:unused-strings creator                # verdict + summary
+npm run check:unused-strings library                # verdict + summary
 npm run check:unused-strings creator -- --list-dead # print the cleanup backlog
 npm run check:unused-strings                        # every known product
 ```
 
 ```
+library: 0 new unused string(s), 0 known dead, 0 dynamic exemption(s).
 creator: 0 new unused string(s), 0 known dead, 5 dynamic exemption(s).
 ```
 
@@ -280,14 +284,25 @@ register it in `src/loc-lint/index.ts`:
 
 ```ts
 export const products: Record<string, () => LocLintProduct> = {
-  creator: createCreatorProduct,
   library: createLibraryProduct,   // survey-core
+  creator: createCreatorProduct,   // survey-creator-core
 };
 ```
 
-`products/creator.ts` is the worked example. `survey-core`'s `englishStrings` is a flat
-table with far fewer dynamic lookups, so its config should be mostly `literal` evidence
-and a short allowlist.
+Two worked examples cover the two shapes:
+
+- **`products/creator.ts`** — namespaced keys (`qt.*`, `pe.*`, …), one resolver per
+  namespace, each backed by a live registry (`Serializer`, `ElementFactory`, grid
+  definitions). The bulk of the work.
+- **`products/library.ts`** — survey-core's `englishStrings` is a *flat* table, so the
+  whole key is one segment. It uses a single catch-all `"*"` resolver that recognises a
+  key as used when it is the `localizationName` of some localizable string (the
+  `@property({ localizable: { defaultStr: true } })` pattern, whose key is a bare
+  property name the literal scan can't see). Nearly everything else is `literal`
+  evidence, and the allowlist is empty.
+
+A catch-all `"*"` resolver runs for any key whose first segment has no dedicated
+resolver — the right tool for flat-key products.
 
 If a product adds a new dynamic lookup — `getString("newns." + x)` — the check fails
 until `newns` gets a resolver. That is deliberate: without one, every key in that

@@ -8,7 +8,9 @@ import { AnalyzeResult, Evidence, LocKey, LocLintConfig } from "./types";
 export function getEvidence(key: string, literals: Set<string>, config: LocLintConfig): Evidence {
   if (literals.has(key)) return "literal";
   const segments = key.split(".");
-  const resolver = config.resolvers[segments[0]];
+  // Namespace resolver (creator: `qt.*`, `pe.*`, ...), else the catch-all `"*"`
+  // for flat-key products (survey-core), whose whole key is one segment.
+  const resolver = config.resolvers[segments[0]] || config.resolvers["*"];
   if (!!resolver && resolver(key, segments, { literals: literals })) return "resolver";
   if (Object.prototype.hasOwnProperty.call(config.allowlist, key)) return "allowlist";
   return null;

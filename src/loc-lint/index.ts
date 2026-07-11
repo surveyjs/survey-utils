@@ -9,6 +9,7 @@ export * from "./dom";
 
 import { LocLintProduct } from "./types";
 import { createCreatorProduct } from "./products/creator";
+import { createLibraryProduct } from "./products/library";
 
 /**
  * Products this linter knows how to check. Each entry is a factory because
@@ -19,5 +20,6 @@ import { createCreatorProduct } from "./products/creator";
  * `products/` that exports a `LocLintProduct` and register it here.
  */
 export const products: Record<string, () => LocLintProduct> = {
+  library: createLibraryProduct,
   creator: createCreatorProduct,
 };

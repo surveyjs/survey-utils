@@ -138,6 +138,31 @@ test("analyze demands a resolver for every namespace built dynamically", () => {
   expect(withResolver.unresolvedDynamicNamespaces).toEqual([]);
 });
 
+test("a catch-all resolver vouches for flat keys with no namespace resolver", () => {
+  // survey-core keys are flat: the whole key is one segment.
+  const config: LocLintConfig = {
+    resolvers: { "*": (key) => key === "completeText" },
+    allowlist: {},
+  };
+  expect(getEvidence("completeText", new Set(), config)).toBe("resolver");
+  expect(getEvidence("savingExceedSize", new Set(), config)).toBe(null);
+});
+
+test("a namespace resolver takes precedence over the catch-all", () => {
+  const config: LocLintConfig = {
+    resolvers: {
+      qt: (_key, segments) => segments[1] === "text",
+      "*": () => true,
+    },
+    allowlist: {},
+  };
+  // qt.image: qt resolver runs (returns false) and the catch-all is NOT consulted.
+  expect(getEvidence("qt.image", new Set(), config)).toBe(null);
+  expect(getEvidence("qt.text", new Set(), config)).toBe("resolver");
+  // A key whose namespace has no resolver falls through to the catch-all.
+  expect(getEvidence("anything", new Set(), config)).toBe("resolver");
+});
+
 test("analyze ignores dynamic prefixes that are not locale namespaces", () => {
   const result = analyze([{ path: "ed.save", line: 1 }], new Set(["ed.save", "survey-core."]), emptyConfig);
   expect(result.unresolvedDynamicNamespaces).toEqual([]);
