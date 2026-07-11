@@ -209,16 +209,18 @@ npm run check:unused-strings                        # every known product
 ```
 
 ```
-creator: 0 new unused string(s), 164 known dead, 5 dynamic exemption(s).
-  164 string(s) are already unused and waiting to be deleted (reason "baseline:" ...).
-  Run with --list-dead to print them.
+creator: 0 new unused string(s), 0 known dead, 5 dynamic exemption(s).
 ```
+
+The five exemptions are `dynamic:` keys built at runtime (e.g. `getLocString("ed." + state)`).
+If a run ever shows `N known dead`, those are strings recorded with a `baseline:` reason
+that are already unused and waiting to be deleted; `--list-dead` prints them grouped by
+namespace.
 
 **Exit code 1 — the build should fail** when a *new* unused string appears, when an
 allowlist entry rots, or when a dynamic namespace loses its resolver. Strings already
 recorded as `baseline:` are reported on every run but do **not** fail the build: they
-are a cleanup backlog, not a regression. A clean summary line reads
-`0 new unused string(s), 0 known dead`.
+are a cleanup backlog, not a regression.
 
 **Prerequisite:** the product must be built. The linter reads the question types,
 serializer properties, logic types and themes from the *built bundle*

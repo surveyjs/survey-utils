@@ -199,15 +199,23 @@ function buildResolvers(registries: Registries): Record<string, KeyResolver> {
     validators: (_path, segments) => registries.classNames.has(segments[1]),
     triggers: (_path, segments) => registries.classNames.has(segments[1]),
 
-    // `getLogicString(name)` -> `"ed.lg." + name`, where name is a logic type
-    // plus a suffix, or a literal such as "trigger_setvalueEmptyText".
     ed: (_path, segments, context) => {
-      if (segments[1] !== "lg" || segments.length < 3) return false;
-      const name = segments.slice(2).join(".");
-      if (context.literals.has(name)) return true;
-      return ["Name", "Description", "Text"].some(
-        (suffix) => name.endsWith(suffix) && registries.logicTypeNames.has(name.slice(0, -suffix.length))
-      );
+      // Pluralized dynamic key: `getLocString("ed.foo" + (n > 1 ? "s" : ""))`
+      // in condition.ts. The singular `ed.foo` is a source literal; the plural
+      // is only reachable through the concatenation, so pair it to the literal.
+      const key = segments.slice(1).join(".");
+      if (key.endsWith("s") && context.literals.has("ed." + key.slice(0, -1))) return true;
+
+      // `getLogicString(name)` -> `"ed.lg." + name`, where name is a logic type
+      // plus a suffix, or a literal such as "trigger_setvalueEmptyText".
+      if (segments[1] === "lg" && segments.length >= 3) {
+        const name = segments.slice(2).join(".");
+        if (context.literals.has(name)) return true;
+        return ["Name", "Description", "Text"].some(
+          (suffix) => name.endsWith(suffix) && registries.logicTypeNames.has(name.slice(0, -suffix.length))
+        );
+      }
+      return false;
     },
 
     // `getLocString("theme.names." + theme)`, `getLocString("theme.colors." + colorName)`
