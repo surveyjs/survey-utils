@@ -49,7 +49,12 @@ survey-utils generate-doc <entry...> [options]
   --out <dir>               Output root. Default: ./docs
   --check                   Generate in memory, diff against what is on disk, exit 1 if they differ.
 
-survey-utils check-strings [product] [--list-dead]
+survey-utils check-strings [product] [--list-dead] [--repo <dir>]
+
+  --repo <dir>              The product's repo checkout, resolved against the working
+                            directory (e.g. --repo ../.. from packages/survey-core).
+                            Overrides the default, which is the repo checked out next
+                            to survey-utils. Needs exactly one product named.
 
 survey-utils translate <product> [--key <key>] [--path <dir>]
 

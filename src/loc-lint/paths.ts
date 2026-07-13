@@ -12,6 +12,14 @@ export function siblingRepo(repo: string, ...segments: Array<string>): string {
   return path.join(siblingsRoot, repo, ...segments);
 }
 
+/**
+ * Root of a product repo checkout: the explicit `--repo` value (resolved
+ * against the working directory), or the repo checked out next to survey-utils.
+ */
+export function productRoot(repo: string, repoRoot?: string): string {
+  return repoRoot ? path.resolve(repoRoot) : path.join(siblingsRoot, repo);
+}
+
 export function allowlistPath(product: string): string {
   return path.join(surveyUtilsRoot, "allowlists", `${product}.json`);
 }

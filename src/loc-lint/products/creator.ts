@@ -1,13 +1,9 @@
 import * as path from "path";
 import { installDom } from "../dom";
-import { readAllowlist, allowlistPath, requireBundle, siblingRepo } from "../paths";
+import { readAllowlist, allowlistPath, productRoot, requireBundle } from "../paths";
 import { KeyResolver, LocLintProduct, ResolverContext } from "../types";
 
 const PRODUCT = "creator";
-const creatorCore = siblingRepo("survey-creator", "packages", "survey-creator-core");
-
-const bundlePath = path.join(creatorCore, "build", "survey-creator-core.js");
-const surveyCorePath = path.join(creatorCore, "node_modules", "survey-core");
 const buildHint = "cd packages/survey-creator-core && npm run build   (in the survey-creator repo)";
 
 /**
@@ -21,12 +17,12 @@ const OTHER_TAB_NAME = "others";
  * source, so a property added in survey-core immediately counts as a use of the
  * matching `pe.*` / `pehelp.*` / `p.*` string.
  */
-function buildRegistries() {
+function buildRegistries(creatorCore: string) {
   // The creator model touches `window` while constructing; install a DOM first.
   installDom();
-  const creator = requireBundle(bundlePath, buildHint);
+  const creator = requireBundle(path.join(creatorCore, "build", "survey-creator-core.js"), buildHint);
   // Same module instance the bundle resolved, so it sees the creator's own classes.
-  const core = requireBundle(surveyCorePath, buildHint);
+  const core = requireBundle(path.join(creatorCore, "node_modules", "survey-core"), buildHint);
   const { Serializer, ElementFactory } = core;
 
   const propertyNames = new Set<string>();
@@ -232,9 +228,12 @@ function buildResolvers(registries: Registries): Record<string, KeyResolver> {
 }
 
 /** Built lazily: constructing the creator model is expensive and needs a DOM. */
-export function createCreatorProduct(): LocLintProduct {
-  const registries = buildRegistries();
-  const renderer = (name: string) => siblingRepo("survey-creator", "packages", name, "src");
+export function createCreatorProduct(repoRoot?: string): LocLintProduct {
+  const pkg = (name: string, ...rest: Array<string>) =>
+    path.join(productRoot("survey-creator", repoRoot), "packages", name, ...rest);
+  const creatorCore = pkg("survey-creator-core");
+  const registries = buildRegistries(creatorCore);
+  const renderer = (name: string) => pkg(name, "src");
   return {
     name: PRODUCT,
     referenceLocaleFile: path.join(creatorCore, "src", "localization", "english.ts"),

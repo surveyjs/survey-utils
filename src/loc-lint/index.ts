@@ -20,7 +20,7 @@ import { createAnalyticsProduct } from "./products/analytics";
  * To add survey-pdf, drop a module into `products/` that exports a
  * `LocLintProduct` and register it here.
  */
-export const products: Record<string, () => LocLintProduct> = {
+export const products: Record<string, (repoRoot?: string) => LocLintProduct> = {
   library: createLibraryProduct,
   creator: createCreatorProduct,
   analytics: createAnalyticsProduct,
