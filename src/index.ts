@@ -2,6 +2,16 @@ import  { readdirSync as utils } from "fs";
 import { ICommentInfo, LocalizationUtils } from "./localization-utils";
 import { dirname, join } from "path";
 
+// The API-doc generator, absorbed from surveyjs-doc-generator. Re-exported with
+// its original names so a consumer can swap the dependency without rewriting its
+// doc_generator wrapper; `survey-utils generate-doc` is the preferred route.
+export {
+  setJsonObj, generateDocumentation, generateMDFiles, buildModel, buildMDFiles,
+  buildDocModelJSON, buildJSONDefinitionAST, buildJSONDefinitionRuntime, loadSerializer,
+  DocEntry, DocEntryType, DocModel, DocOptions, MDGenerationOptions
+} from "./doc-gen";
+export { runCheckUnusedStrings } from "./checkUnusedStrings";
+
 export function translateFile(fileName: string): void {
     new LocalizationUtils().translateFile(fileName, getEnglishJson(fileName), getEnglishTopComments(fileName));
 }

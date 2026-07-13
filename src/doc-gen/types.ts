@@ -1,0 +1,45 @@
+export enum DocEntryType { unknown, classType, interfaceType, functionType, variableType, enumType }
+
+export interface DocEntry {
+  name?: string;
+  entryType?: DocEntryType;
+  className?: string;
+  jsonName?: string;
+  fileName?: string;
+  documentation?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  isDeprecated?: boolean;
+  deprecationInfo?: string;
+  see?: any;
+  type?: string;
+  baseType?: string;
+  implements?: string[];
+  allTypes?: string[];
+  constructors?: DocEntry[];
+  members?: DocEntry[];
+  parameters?: DocEntry[];
+  returnType?: string;
+  returnDocumentation?: string;
+  returnTypeGenerics?: string[];
+  hideForClasses?: string[];
+  isHidden?: boolean;
+  typeGenerics?: string[];
+  pmeType?: string;
+  hasSet?: boolean;
+  isField?: boolean;
+  isOptional?: boolean;
+  isStatic?: boolean;
+  isProtected?: boolean;
+  isPublic?: boolean;
+  isLocalizable?: boolean;
+  jsonClassName?: string;
+  isSerialized?: boolean;
+  defaultValue?: any;
+  serializedChoices?: any[];
+  eventSenderName?: string;
+  eventOptionsName?: string;
+}
+
+/** Absolute file path &rarr; file content. Emitters produce one; the CLI writes or diffs it. */
+export type FileMap = { [absolutePath: string]: string };

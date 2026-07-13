@@ -154,9 +154,14 @@ npm run debug
 survey-utils/
 ├── src/
 │   ├── index.ts              # Main exports
-│   └── localization-utils.ts # Core utilities
+│   ├── cli.ts                # The `survey-utils` bin: generate-doc, check-strings
+│   ├── localization-utils.ts # Core utilities
+│   ├── loc-lint/             # Unused-string check
+│   └── doc-gen/              # API-doc generator (from surveyjs-doc-generator)
 ├── tests/
-│   └── translation_utils.test.ts # Unit tests
+│   ├── translation_utils.test.ts # Unit tests
+│   ├── loc-lint.test.ts
+│   └── doc-gen/              # Doc-generator specs + fixtures
 ├── .vscode/
 │   ├── launch.json           # Debug configurations
 │   └── tasks.json            # Build tasks
@@ -211,6 +216,8 @@ npm run build
 npm run check:unused-strings dashboard              # verdict + summary
 npm run check:unused-strings creator -- --list-dead # print the cleanup backlog
 npm run check:unused-strings                        # every known product
+
+survey-utils check-strings dashboard                # the same check, through the CLI
 ```
 
 ```
@@ -317,6 +324,82 @@ resolver — the right tool for flat-key products.
 If a product adds a new dynamic lookup — `getString("newns." + x)` — the check fails
 until `newns` gets a resolver. That is deliberate: without one, every key in that
 namespace would be silently unprovable.
+
+## 📚 API-Doc Generation (doc-gen)
+
+`src/doc-gen/` is the code of [surveyjs-doc-generator](https://github.com/surveyjs/surveyjs-doc-generator),
+ported to TypeScript 5.7 and exposed through the `survey-utils` CLI, so a consumer needs one
+build-time tool dependency instead of two. The old package still works and still ships to every
+consumer; nothing has been cut over. Migration is manual, repo by repo.
+
+```bash
+survey-utils generate-doc <entry...> [options]
+```
+
+| Emitter | Produces |
+| --- | --- |
+| `--md` | `<ClassName>.md` per class/interface + `index.md`, in `<out>/api` |
+| `--json` | The raw doc model: `classes.json` + `pmes.json` |
+| `--json-definition` | `surveyjs_definition.json` from **`Serializer.generateSchema()`** — needs `--serializer` |
+| `--json-definition=ast` | `surveyjs_definition.json` derived from the **AST** — a different, larger document (see below) |
+
+They are independently selectable: the model is built once and fanned out to whichever emitters
+were asked for. At least one is required — unlike the old generator, there is no implicit default.
+`--serializer <path>` names the built product bundle (`./build/survey.core`) whose `Serializer`
+supplies the metadata; it is optional, because survey-creator generates docs without one. All paths
+resolve against the working directory, so consumers run this from their own package directory.
+
+```jsonc
+// what a consumer's package.json will eventually run — applied by hand, later
+// survey-core
+"doc_gen": "survey-utils generate-doc ./entries/chunks/model.ts --serializer ./build/survey.core --md --json-definition"
+// survey-creator-core (no bundle -> no schema)
+"doc_gen": "survey-utils generate-doc src/entries/index.ts --md"
+```
+
+`--check` generates into memory, diffs against what is on disk and exits 1 if they differ — wire it
+into CI to catch docs that were never regenerated. Two runs of the same input are byte-identical.
+
+`generateDocumentation`, `generateMDFiles` and `setJsonObj` are still exported from the package root
+with their original signatures, so a consumer can swap the dependency without rewriting its
+`doc_generator/*.js` wrapper in the same step. `generateDocumentation` now also *returns* the model.
+
+### Two producers of `surveyjs_definition.json`
+
+The name is shared by two different documents, and they are not interchangeable:
+
+- **runtime** (`--json-definition`, ~107 KB) — `Serializer.generateSchema()`. What the library
+  actually serializes. This is the one you want, and it reproduces survey-core's
+  `docs/generate_definition.js` byte for byte.
+- **ast** (`--json-definition=ast`, ~128 KB) — walks the TypeScript sources instead. It is what
+  survey-core's `doc_gen` script emits today. Nobody has yet established who consumes it, so it is
+  ported as-is rather than dropped.
+
+### The TypeScript 5 port
+
+Two `ts.*` APIs changed shape between 4.2 and 5.x in ways that fail *silently* — no crash, just a
+quietly wrong doc model. Both are isolated in `src/doc-gen/ts-compat.ts`:
+
+- **`node.decorators` was removed in 5.0.** Reading it now yields `undefined`, which would drop
+  every `@property()`-declared member — most of survey-core's serializable properties — from the
+  model. Use `ts.canHaveDecorators` / `ts.getDecorators`.
+- **`JSDocTagInfo.text` became `SymbolDisplayPart[]` in 4.3.** Assigning it straight into a
+  `DocEntry` would put an array of parts where the JSON expects a string, corrupting `@title`,
+  `@description`, `@deprecated`, `@see`, `@returns` and `@hidefor`.
+
+`tests/doc-gen/members.test.ts` and `tags.test.ts` guard both.
+
+The port was validated by diffing its output against the old generator's, run at TypeScript 4.2.4,
+for survey-core and survey-creator-core. `surveyjs_definition.json` (both producers) is byte-identical.
+The doc model and Markdown differ only where TypeScript 5 is *better*, in three explained ways, with
+no member gained or lost:
+
+1. DOM globals now resolve, so `any` became `HTMLElement`, `HTMLInputElement`, `File[]`, `PointerEvent`…
+2. `@see` tag text no longer carries a leading space (a display-parts consequence).
+3. `SurveyCreatorModel.expandCollapseManager` — an inferred type 4.2 gave up on and typed `any`.
+
+Regenerate the baseline before changing anything in `src/doc-gen/`: a doc model with *fewer*
+properties than the previous one means a `ts.*` API changed under you again.
 
 ## 🤝 Contributing
 
