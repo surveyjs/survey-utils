@@ -89,17 +89,30 @@ npm run check:unused-strings -- creator --list-dead
 The `run_*.cmd` files at the repo root are the same runs with no arguments to remember
 (`run_translate_library.cmd`, `run_check_unused_strings_creator.cmd`, …).
 
-### The Azure Translator subscription key
+## 🔑 Setting up the translation key
 
-`translate` needs one — Azure portal → your Translator resource → **Keys and Endpoint**.
-Two ways to supply it; `--key` wins when both are present:
+`translate` calls the Azure Cognitive Services Translator API, which needs a **subscription
+key**. Get it from the Azure portal: your Translator resource → **Keys and Endpoint** (either of
+the two keys works). No other command needs one — `check-strings` and `generate-doc` never leave
+the machine.
+
+The key is read from one of three places, in this order — the first one that has it wins:
+
+| # | Source | Use it for |
+| --- | --- | --- |
+| 1 | `--key <key>` on the command line | A key that lives outside this machine: a CI secret, a colleague's key, a one-off run. |
+| 2 | `TRANSLATION_API_KEY` in the environment | CI, or a shell you've exported it in. |
+| 3 | `TRANSLATION_API_KEY` in a `.env` file | Your own machine: set it once and forget it. |
+
+With none of them, the command fails with an explicit error *before* it translates anything, so a
+missing key never leaves the locale files half-written.
+
+### 1. A `.env` file — the everyday setup
+
+`.env` is the one to use locally. Copy the template and paste the key in:
 
 ```bash
-# 1. As a command parameter -- for a key that lives outside this machine, e.g. a CI secret.
-node ./dist/cli.js translate library --key <key>
-
-# 2. From TRANSLATION_API_KEY, in the environment or in a .env file.
-cp .env.example .env      # .env is git-ignored and must never be committed
+cp .env.example .env
 ```
 
 ```ini
@@ -107,9 +120,46 @@ cp .env.example .env      # .env is git-ignored and must never be committed
 TRANSLATION_API_KEY=<your Azure Translator subscription key>
 ```
 
-With neither, the command fails with an explicit error before it translates anything. Never
-hard-code the key in a `scripts` entry: it would be committed, and `$VAR` in an npm script does
-not expand on Windows.
+`.env` is git-ignored and **must never be committed** — a leaked key is a billable resource
+someone else can spend. `.env.example` is the committed one, and holds no value.
+
+The file is loaded from the **working directory** the command runs in, not from wherever
+`survey-utils` is installed. In this repo that means `survey-utils/.env`. When a product calls
+the bin from its own `package.json`, the `.env` has to sit in **that product's package** —
+`survey-library/packages/survey-core/.env`, next to the `package.json` whose script runs.
+
+### 2. The environment variable
+
+Same variable, no file — this is what CI uses:
+
+```bash
+# bash
+export TRANSLATION_API_KEY=<key>
+
+# PowerShell
+$env:TRANSLATION_API_KEY = "<key>"
+```
+
+```yaml
+# a CI job: the key comes from the secret store, never from the repo
+env:
+  TRANSLATION_API_KEY: ${{ secrets.TRANSLATION_API_KEY }}
+```
+
+### 3. `--key` on the command line
+
+Overrides both of the above:
+
+```bash
+node ./dist/cli.js translate library --key <key>       # in this repo
+npm run translate -- --key <key>                       # through an npm script
+```
+
+**Never hard-code the key in a `scripts` entry.** It would be committed, and the `$VAR` trick
+doesn't save you — a `"translate": "survey-utils translate --key $TRANSLATION_API_KEY"` script
+does not expand on Windows and passes the literal text `$TRANSLATION_API_KEY` as the key. Leave
+`--key` out of `package.json` entirely; let the command read the environment, and pass `--key`
+after `--` on the rare run that needs a different one.
 
 ## 📦 Using it from a product's package.json
 
@@ -160,7 +210,8 @@ release and a missing one aborts the check with an explanatory message.
     "doc_gen:check": "npm run doc_gen -- --check",
 
     // Localization. --path is required: the folder cannot be found from node_modules.
-    // The key comes from TRANSLATION_API_KEY; `npm run translate -- --key <key>` overrides it.
+    // No key here: it comes from TRANSLATION_API_KEY (environment, or a .env in THIS package).
+    // See "Setting up the translation key" above.
     "translate": "survey-utils translate --path ./src/localization"
   }
 }
