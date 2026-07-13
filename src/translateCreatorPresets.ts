@@ -1,9 +1,4 @@
-import { join } from "path";
-import { translateFile, translateFiles, updateEnglishFile } from "./index";
+// Kept for run_translate_creator_presets.cmd. `survey-utils translate creator-presets` is the same run.
+import { runTranslate } from "./translate";
 
-const path = join(__dirname, "../../survey-creator/packages/survey-creator-core/src/ui-preset-editor/localization");
-
-translateFiles(path);
-//Uncomment to test german file only
-//translateFile(join(path, "german.ts"));
-//updateEnglishFile(join(path, "english.ts"));
+process.exitCode = runTranslate(["creator-presets", ...process.argv.slice(2)]);

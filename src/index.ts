@@ -11,6 +11,7 @@ export {
   DocEntry, DocEntryType, DocModel, DocOptions, MDGenerationOptions
 } from "./doc-gen";
 export { runCheckUnusedStrings } from "./checkUnusedStrings";
+export { setTranslationKey } from "./localization-utils";
 
 export function translateFile(fileName: string): void {
     new LocalizationUtils().translateFile(fileName, getEnglishJson(fileName), getEnglishTopComments(fileName));

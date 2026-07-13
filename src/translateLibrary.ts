@@ -1,9 +1,4 @@
-import { join } from "path";
-import { translateFile, translateFiles, updateEnglishFile } from "./index";
+// Kept for run_translate_library.cmd. `survey-utils translate library` is the same run.
+import { runTranslate } from "./translate";
 
-const path = join(__dirname, "../../survey-library/packages/survey-core/src/localization");
-
-translateFiles(path);
-//Uncomment to test german file only
-//translateFile(join(path, "german.ts"));
-//updateEnglishFile(join(path, "english.ts"));
+process.exitCode = runTranslate(["library", ...process.argv.slice(2)]);

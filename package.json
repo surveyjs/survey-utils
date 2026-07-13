@@ -37,8 +37,10 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
-    "check:unused-strings": "node ./dist/checkUnusedStrings.js",
-    "debug": "ts-node translateLibrary.ts",
+    "check:unused-strings": "node ./dist/cli.js check-strings",
+    "translate": "node ./dist/cli.js translate",
+    "generate-doc": "node ./dist/cli.js generate-doc",
+    "debug": "ts-node src/translateLibrary.ts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },

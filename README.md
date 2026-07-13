@@ -4,54 +4,114 @@ A utility library for SurveyJS localization and translation management.
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-Before running any translation commands, make sure to install dependencies and build the project:
+Everything the package does is reached through its one bin, `survey-utils`:
 
 ```bash
-# Install dependencies
-npm i
-
-# Compile TypeScript files
-npm run build
+survey-utils translate <product> [--key <key>] [--path <dir>]   # translate localization files
+survey-utils check-strings [product] [--list-dead]              # report unused localization strings
+survey-utils generate-doc <entry...> [options]                  # generate API docs
+survey-utils help                                               # the full option list
 ```
 
-The translation commands call the Azure Translator API, which needs a subscription key.
-Copy the template and fill in the key — `.env` is git-ignored and must never be committed:
+### From a consumer's package.json
+
+Install the package, then call the bin from `scripts` — npm puts `node_modules/.bin` on the
+path, so the bare `survey-utils` name resolves:
+
+```jsonc
+// package.json
+{
+  "devDependencies": {
+    "survey-utils": "^1.0.0"
+  },
+  "scripts": {
+    // Takes the key from TRANSLATION_API_KEY; add `--key <key>` to pass it explicitly.
+    "translate": "survey-utils translate --path ./src/localization",
+    "check:unused-strings": "survey-utils check-strings library",
+    "doc_gen": "survey-utils generate-doc ./entries/chunks/model.ts --serializer ./build/survey.core --md --json-definition"
+  }
+}
+```
 
 ```bash
-cp .env.example .env
+npm run translate -- --key <key>      # the key as a command parameter, e.g. from a CI secret
+```
+
+`--path` is what makes `translate` work from a consumer package: without it, the product's
+localization folder is looked up next to `survey-utils` — the layout of a local SurveyJS
+checkout (see below), which an installed dependency does not have. Don't hard-code the key in
+a `scripts` entry: it would be committed, and `$VAR` in a script does not expand on Windows.
+
+### From this repository
+
+`survey-utils` is not on the path here, so run the built bin through `node`. Install and
+build first:
+
+```bash
+npm i
+npm run build
+
+node ./dist/cli.js translate library
+node ./dist/cli.js check-strings analytics
+```
+
+The `npm run translate`, `npm run check:unused-strings` and `npm run generate-doc` scripts are
+thin aliases for those three, and take the same arguments after `--`:
+
+```bash
+npm run translate -- creator --key <key>
+npm run check:unused-strings -- creator --list-dead
+```
+
+### 🌍 Translation
+
+`translate` sends every string that has no translation yet to the Azure Translator API and
+writes the result back into the product's locale files.
+
+```bash
+node ./dist/cli.js translate library           # survey-core
+node ./dist/cli.js translate creator           # survey-creator-core
+node ./dist/cli.js translate creator-presets   # survey-creator-core UI presets
+node ./dist/cli.js translate analytics         # survey-analytics
+```
+
+Each product's localization folder is resolved relative to the SurveyJS checkout root —
+the folder that holds `survey-utils`, `survey-library`, `survey-creator` and
+`survey-analytics` side by side. `--path <dir>` names the folder outright, resolved against
+the working directory, and works with no product at all:
+
+```bash
+node ./dist/cli.js translate --path ../survey-library/packages/survey-core/src/localization
+```
+
+#### The subscription key
+
+The Azure Translator API needs a subscription key — find it in the Azure portal under your
+Translator resource → **Keys and Endpoint**. Give it to the command in either of two ways;
+`--key` wins when both are present:
+
+```bash
+# 1. As a command parameter -- for a key that lives outside this machine, e.g. a CI secret.
+node ./dist/cli.js translate library --key <key>
+
+# 2. From TRANSLATION_API_KEY, in the environment or in a .env file.
+cp .env.example .env      # .env is git-ignored and must never be committed
 ```
 
 ```ini
+# .env
 TRANSLATION_API_KEY=<your Azure Translator subscription key>
 ```
 
-Find the key in the Azure portal under your Translator resource → **Keys and Endpoint**.
-Commands that translate text fail with an explicit error if `TRANSLATION_API_KEY` is not set.
-
-### Translation Commands
-
-This tool provides two main translation commands for different SurveyJS libraries:
-
-#### 📚 Translate Survey Core Library
-```bash
-./run_translate_library.cmd
-```
-This command translates strings for the **survey-core** library.
-
-#### 🛠️ Translate Survey Creator Library  
-```bash
-./run_translate_creator.cmd
-```
-This command translates strings for the **survey-creator-core** library.
+With neither, the command fails with an explicit error before it translates anything.
 
 ### 🧹 Unused-String Check
 
 ```bash
-./run_check_unused_strings_library.cmd     # survey-core
-./run_check_unused_strings_creator.cmd     # survey-creator-core
-./run_check_unused_strings_analytics.cmd   # survey-analytics
+node ./dist/cli.js check-strings library     # survey-core
+node ./dist/cli.js check-strings creator     # survey-creator-core
+node ./dist/cli.js check-strings analytics   # survey-analytics
+node ./dist/cli.js check-strings             # every known product
 ```
 
 Reports localization keys that no product source reaches any more, and exits with code
@@ -113,10 +173,14 @@ export var loc = {
 ### Batch Operations
 
 ```typescript
-import { updateCommentFiles, translateFile } from 'survey-utils';
+import { setTranslationKey, translateFile, translateFiles } from 'survey-utils';
 
-// Update all translation files in a directory
-updateCommentFiles('/path/to/localization/files');
+// The key `survey-utils translate --key` sets. Optional: without it the API key is
+// read from TRANSLATION_API_KEY (environment or .env).
+setTranslationKey(process.env.MY_AZURE_KEY);
+
+// Translate every locale file in a directory
+translateFiles('/path/to/localization/files');
 
 // Translate a specific file
 translateFile('/path/to/localization/german.ts');
@@ -154,7 +218,9 @@ npm run debug
 survey-utils/
 ├── src/
 │   ├── index.ts              # Main exports
-│   ├── cli.ts                # The `survey-utils` bin: generate-doc, check-strings
+│   ├── cli.ts                # The `survey-utils` bin: translate, check-strings, generate-doc
+│   ├── translate.ts          # Translation command: product paths, --key, --path
+│   ├── translateLibrary.ts   # Per-product entry points, kept for the run_translate_*.cmd
 │   ├── localization-utils.ts # Core utilities
 │   ├── loc-lint/             # Unused-string check
 │   └── doc-gen/              # API-doc generator (from surveyjs-doc-generator)
@@ -165,11 +231,9 @@ survey-utils/
 ├── .vscode/
 │   ├── launch.json           # Debug configurations
 │   └── tasks.json            # Build tasks
-├── dist/                     # Built files (generated)
-├── translateLibrary.ts       # Translation script
-├── run_translate_library.cmd # Survey Core translation
-├── run_translate_creator.cmd # Survey Creator translation
-├── package.json              # Package configuration
+├── allowlists/              # Known-dynamic and known-dead strings, per product
+├── dist/                    # Built files (generated)
+├── package.json             # Package configuration
 ├── tsconfig.json            # TypeScript configuration
 ├── jest.config.js           # Jest test configuration
 └── README.md                # This file
@@ -187,6 +251,14 @@ survey-utils/
 - `replaceJson(code: string, newJson: string): string` - Replace JSON content
 - `generateJsonText(json: any, comments: ICommentInfo[], padding?: number): string` - Generate JSON with comments
 - `translateFile(fileName: string, englishJSON: any): void` - Translate a specific file
+
+### Package functions
+
+- `setTranslationKey(key: string): void` - Azure Translator subscription key for this process, ahead of `TRANSLATION_API_KEY`. This is what `translate --key` calls.
+- `translateFiles(path: string): void` - Translate every locale file in a folder
+- `translateFile(fileName: string): void` - Translate one locale file
+- `runCheckUnusedStrings(args: string[]): number` - The `check-strings` command
+- `generateDocumentation`, `generateMDFiles`, `setJsonObj` - The doc generator
 
 ### Interfaces
 
@@ -213,13 +285,10 @@ and **`analytics`** (survey-analytics). `analytics` also answers to **`dashboard
 name it was registered under first — both spellings select the same product.
 
 ```bash
-npm run build
-npm run check:unused-strings analytics              # verdict + summary
-npm run check:unused-strings creator -- --list-dead # print the cleanup backlog
-npm run check:unused-strings                        # every known product
-
-survey-utils check-strings analytics                # the same check, through the CLI
-survey-utils check-strings dashboard                # the alias, kept for old scripts
+survey-utils check-strings analytics              # verdict + summary
+survey-utils check-strings creator --list-dead    # print the cleanup backlog
+survey-utils check-strings                        # every known product
+survey-utils check-strings dashboard              # the alias, kept for old scripts
 ```
 
 ```

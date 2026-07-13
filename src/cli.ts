@@ -6,12 +6,14 @@ import {
   buildJSONDefinitionRuntime, loadSerializer, setJsonObj, diffFiles, writeFiles, resolveDir, FileMap
 } from "./doc-gen";
 import { runCheckUnusedStrings } from "./checkUnusedStrings";
+import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 
 const USAGE = `survey-utils <command> [options]
 
 Commands:
   generate-doc <entry...>   Generate API documentation from TypeScript entry files.
   check-strings [product]   Report localization strings no product source reaches any more.
+  translate <product>       Translate the localization files of a product.
 
 survey-utils generate-doc <entry...> [options]
 
@@ -39,6 +41,16 @@ survey-utils generate-doc <entry...> [options]
   --check                   Generate in memory, diff against what is on disk, exit 1 if they differ.
 
 survey-utils check-strings [product] [--list-dead]
+
+survey-utils translate <product> [--key <key>] [--path <dir>]
+
+  <product>                 ${translateProducts.join(" | ")}
+
+  --key <key>               Azure Translator subscription key. Without it the key is read
+                            from TRANSLATION_API_KEY (environment or .env); --key wins.
+  --path <dir>              Localization folder to translate, resolved against the working
+                            directory. Overrides the product's default folder, which is
+                            looked up next to survey-utils in a local SurveyJS checkout.
 `;
 
 interface DocArgs {
@@ -168,9 +180,16 @@ function main(): void {
     if (command === "check-strings") {
       process.exit(runCheckUnusedStrings(argv.slice(1)));
     }
+    if (command === "translate") {
+      // No process.exit on success: the translation requests are still in flight, and
+      // exiting would kill them. Node ends the process once the event loop drains.
+      const code = runTranslate(argv.slice(1));
+      if (code !== 0) process.exit(code);
+      return;
+    }
     throw new UsageError("Unknown command: " + command);
   } catch (error) {
-    const usage = error instanceof UsageError;
+    const usage = error instanceof UsageError || error instanceof TranslateUsageError;
     console.error(usage ? String(error.message) : String(error instanceof Error ? error.stack : error));
     if (usage) console.error("\n" + USAGE);
     process.exit(usage ? 2 : 1);
