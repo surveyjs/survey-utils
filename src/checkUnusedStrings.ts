@@ -1,4 +1,6 @@
-import { checkProduct, formatDeadStrings, formatErrors, formatSummary, products } from "./loc-lint";
+import {
+  checkProduct, formatDeadStrings, formatErrors, formatSummary, products, resolveProductName,
+} from "./loc-lint";
 
 /**
  * Reports localization strings that no product source reaches any more.
@@ -6,6 +8,8 @@ import { checkProduct, formatDeadStrings, formatErrors, formatSummary, products 
  *   survey-utils check-strings creator
  *   survey-utils check-strings creator --list-dead
  *   node ./dist/checkUnusedStrings.js creator          (the same check, run directly)
+ *
+ * Product aliases are accepted, so `dashboard` still selects `analytics`.
  *
  * Exit code 1 means the build should fail: a *new* unused string appeared, the
  * allowlist rotted, or a dynamic namespace lost its resolver. Strings already
@@ -15,13 +19,17 @@ import { checkProduct, formatDeadStrings, formatErrors, formatSummary, products 
 export function runCheckUnusedStrings(args: string[]): number {
   const listDead = args.indexOf("--list-dead") > -1;
   const requested = args.filter((arg) => !arg.startsWith("--"));
-  const names = requested.length > 0 ? requested : Object.keys(products);
 
-  const unknown = names.filter((name) => !products[name]);
+  const unknown = requested.filter((name) => !resolveProductName(name));
   if (unknown.length > 0) {
     console.error(`Unknown product(s): ${unknown.join(", ")}. Known: ${Object.keys(products).join(", ")}`);
     return 2;
   }
+
+  // An alias and its product name in one run must not check the product twice.
+  const names = requested.length > 0
+    ? Array.from(new Set(requested.map((name) => resolveProductName(name) as string)))
+    : Object.keys(products);
 
   let failed = false;
   names.forEach((name) => {

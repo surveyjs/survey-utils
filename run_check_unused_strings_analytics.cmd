@@ -1,0 +1,1 @@
+node ./dist/checkUnusedStrings.js analytics

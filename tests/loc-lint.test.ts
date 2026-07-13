@@ -3,6 +3,7 @@ import { analyze, getEvidence } from "../src/loc-lint/analyze";
 import { collectLocaleKeys } from "../src/loc-lint/inventory";
 import { collectDynamicNamespaces, collectStringLiterals } from "../src/loc-lint/literals";
 import { deadStrings, dynamicStrings, formatErrors, formatSummary } from "../src/loc-lint/run";
+import { products, resolveProductName } from "../src/loc-lint";
 import { LocLintConfig, LocLintProduct } from "../src/loc-lint/types";
 
 const emptyConfig: LocLintConfig = { resolvers: {}, allowlist: {} };
@@ -163,8 +164,8 @@ test("a namespace resolver takes precedence over the catch-all", () => {
   expect(getEvidence("anything", new Set(), config)).toBe("resolver");
 });
 
-test("the dashboard resolver matches prefix families the way analytics builds keys", () => {
-  // Mirrors products/dashboard.ts: visualizer/chart/download suffixes are source
+test("the analytics resolver matches prefix families the way analytics builds keys", () => {
+  // Mirrors products/analytics.ts: visualizer/chart/download suffixes are source
   // literals; interval modes and top-N are closed enums.
   const INTERVAL_MODES = new Set(["auto", "decades", "years", "quarters", "months", "days"]);
   const TOP_N = new Set(["-1", "5", "10", "20"]);
@@ -189,6 +190,16 @@ test("the dashboard resolver matches prefix families the way analytics builds ke
   expect(getEvidence("intervalMode_default", literals, config)).toBe(null);
   expect(getEvidence("intervalMode_custom", literals, config)).toBe(null);
   expect(getEvidence("groupButton", literals, config)).toBe(null);
+});
+
+test("survey-analytics is registered as `analytics`, with `dashboard` as an alias", () => {
+  expect(Object.keys(products)).toContain("analytics");
+  expect(Object.keys(products)).not.toContain("dashboard");
+  // The old name keeps working, and both spellings select the same product.
+  expect(resolveProductName("dashboard")).toBe("analytics");
+  expect(resolveProductName("analytics")).toBe("analytics");
+  expect(resolveProductName("creator")).toBe("creator");
+  expect(resolveProductName("nope")).toBe(undefined);
 });
 
 test("analyze ignores dynamic prefixes that are not locale namespaces", () => {

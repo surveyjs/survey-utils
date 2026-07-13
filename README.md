@@ -51,7 +51,7 @@ This command translates strings for the **survey-creator-core** library.
 ```bash
 ./run_check_unused_strings_library.cmd     # survey-core
 ./run_check_unused_strings_creator.cmd     # survey-creator-core
-./run_check_unused_strings_dashboard.cmd   # survey-analytics
+./run_check_unused_strings_analytics.cmd   # survey-analytics
 ```
 
 Reports localization keys that no product source reaches any more, and exits with code
@@ -209,21 +209,23 @@ Finds translated strings that no longer reach the product, and fails CI when a n
 added string is never used.
 
 Known products: **`library`** (survey-core), **`creator`** (survey-creator-core),
-and **`dashboard`** (survey-analytics).
+and **`analytics`** (survey-analytics). `analytics` also answers to **`dashboard`**, the
+name it was registered under first — both spellings select the same product.
 
 ```bash
 npm run build
-npm run check:unused-strings dashboard              # verdict + summary
+npm run check:unused-strings analytics              # verdict + summary
 npm run check:unused-strings creator -- --list-dead # print the cleanup backlog
 npm run check:unused-strings                        # every known product
 
-survey-utils check-strings dashboard                # the same check, through the CLI
+survey-utils check-strings analytics                # the same check, through the CLI
+survey-utils check-strings dashboard                # the alias, kept for old scripts
 ```
 
 ```
 library:   0 new unused string(s), 0 known dead, 0 dynamic exemption(s).
 creator:   0 new unused string(s), 0 known dead, 5 dynamic exemption(s).
-dashboard: 0 new unused string(s), 0 known dead, 0 dynamic exemption(s).
+analytics: 0 new unused string(s), 0 known dead, 0 dynamic exemption(s).
 ```
 
 The five exemptions are `dynamic:` keys built at runtime (e.g. `getLocString("ed." + state)`).
@@ -239,7 +241,7 @@ are a cleanup backlog, not a regression.
 **Prerequisite (registry-backed products only):** `library` and `creator` read the
 question types, serializer properties, logic types and themes from the *built bundle*,
 not from source, so that product must be built first or the check aborts with an
-explanatory message. `dashboard` is purely static (see below) and needs no build.
+explanatory message. `analytics` is purely static (see below) and needs no build.
 
 ### Why it is not just a grep
 
@@ -296,9 +298,14 @@ register it in `src/loc-lint/index.ts`:
 export const products: Record<string, () => LocLintProduct> = {
   library: createLibraryProduct,     // survey-core
   creator: createCreatorProduct,     // survey-creator-core
-  dashboard: createDashboardProduct, // survey-analytics
+  analytics: createAnalyticsProduct, // survey-analytics
 };
 ```
+
+The key is the name callers type and the name of the product's `allowlists/<name>.json`.
+When a product is renamed, keep the old name working by adding it to `productAliases`
+in the same file (`dashboard` → `analytics`) instead of leaving a second registry entry:
+an alias resolves to the product but does not make it run twice in a whole-repo check.
 
 Three worked examples cover three shapes:
 
@@ -311,7 +318,7 @@ Three worked examples cover three shapes:
   `@property({ localizable: { defaultStr: true } })` pattern, whose key is a bare
   property name the literal scan can't see). Nearly everything else is `literal`
   evidence, and the allowlist is empty.
-- **`products/dashboard.ts`** — survey-analytics is flat too, but its dynamic keys come
+- **`products/analytics.ts`** — survey-analytics is flat too, but its dynamic keys come
   from Plotly-backed chart/visualizer registries that won't load under Node. So its
   `"*"` resolver is *static*: `visualizer_<type>` / `chartType_<type>` / `<type>Download­Caption`
   are matched by checking the suffix is a source literal (the type is always assigned as

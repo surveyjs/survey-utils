@@ -2,7 +2,7 @@ import * as path from "path";
 import { allowlistPath, readAllowlist, siblingRepo } from "../paths";
 import { KeyResolver, LocLintProduct } from "../types";
 
-const PRODUCT = "dashboard";
+const PRODUCT = "analytics";
 const analyticsSrc = siblingRepo("survey-analytics", "src");
 
 /**
@@ -50,7 +50,7 @@ const anyKey: KeyResolver = (key, _segments, context) => {
   return false;
 };
 
-export function createDashboardProduct(): LocLintProduct {
+export function createAnalyticsProduct(): LocLintProduct {
   return {
     name: PRODUCT,
     referenceLocaleFile: path.join(analyticsSrc, "analytics-localization", "english.ts"),
