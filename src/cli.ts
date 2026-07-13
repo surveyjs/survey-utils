@@ -7,6 +7,7 @@ import {
 } from "./doc-gen";
 import { runCheckUnusedStrings } from "./checkUnusedStrings";
 import { products } from "./loc-lint";
+import { ProductRootError, requireDir } from "./paths";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 
 const USAGE = `survey-utils <command> [options]
@@ -16,10 +17,22 @@ Commands:
   check-strings [product]   Report localization strings no product source reaches any more.
   translate <product>       Translate the localization files of a product.
 
+--path <dir> means the same thing in all three: the root of the product's repo -- the
+folder that holds its package.json, not a folder inside it. Each command joins its own
+subfolders onto it. Without --path, generate-doc works from the working directory, and
+check-strings and translate look the repo up next to survey-utils (a local SurveyJS
+checkout, where survey-utils sits beside survey-library, survey-creator, survey-analytics).
+
 survey-utils generate-doc <entry...> [options]
 
-  <entry...>                One or more TS entry files, relative to the working directory
-                            (survey-core: ./entries/chunks/model.ts, creator: src/entries/index.ts).
+  <entry...>                One or more TS entry files, relative to --path, or to the working
+                            directory without it (survey-core: ./entries/chunks/model.ts,
+                            creator: src/entries/index.ts).
+
+  --path <dir>              Repo root every relative path below is resolved against:
+                            <entry...>, --serializer, --out and --md-out. Default: the
+                            working directory, so a product calling the bin from its own
+                            package.json needs no --path.
 
   --serializer <path>       Module to require for Serializer metadata (e.g. ./build/survey.core).
                             Optional: without it the docs are AST/JSDoc only, and every
@@ -55,10 +68,9 @@ survey-utils check-strings [product] [--list-dead] [--path <dir>]
   [product]                 ${Object.keys(products).join(" | ")}. Default: every one of them.
 
   --list-dead               Print the cleanup backlog: strings already recorded as dead.
-  --path <dir>              Root of the product's checkout (the folder with its package.json),
-                            resolved against the working directory. Overrides the default,
-                            which is the repo next to survey-utils in a local SurveyJS
-                            checkout. It names one repo, so name the product with it.
+  --path <dir>              Repo root of the product. It names one repo, so name the product
+                            with it. The locale file, the source roots and the built bundle
+                            are all found under it.
 
 survey-utils translate <product> [--key <key>] [--path <dir>]
 
@@ -66,16 +78,14 @@ survey-utils translate <product> [--key <key>] [--path <dir>]
 
   --key <key>               Azure Translator subscription key. Without it the key is read
                             from TRANSLATION_API_KEY (environment or .env); --key wins.
-  --path <dir>              Localization folder to translate, resolved against the working
-                            directory. Overrides the product's default folder, which is
-                            looked up next to survey-utils in a local SurveyJS checkout.
-
-generate-doc takes every path from the caller (entries, --serializer, --out), so it needs
-no --path.
+  --path <dir>              Repo root of the product. The product's localization folder is
+                            joined onto it (library -> packages/survey-core/src/localization).
 `;
 
 interface DocArgs {
   entries: string[];
+  /** Repo root the relative paths below resolve against. Default: the working directory. */
+  path?: string;
   serializer?: string;
   md: boolean;
   json: boolean;
@@ -129,6 +139,8 @@ function parseDocArgs(args: string[]): DocArgs {
       const bytes = parseInt(value(), 10);
       if (!(bytes > 0)) throw new UsageError("--max-bytes needs a positive number of bytes");
       res.maxBytes = bytes;
+    } else if (arg === "--path") {
+      res.path = value();
     } else if (arg === "--serializer") {
       res.serializer = value();
     } else if (arg === "--product") {
@@ -173,31 +185,40 @@ function parseDocArgs(args: string[]): DocArgs {
 }
 
 function generateDoc(args: DocArgs): number {
-  const bundle = !!args.serializer ? loadBundle(args.serializer) : null;
+  // The repo root of --path. Without it every path stays as the caller typed it and
+  // resolves against the working directory, which is what a product's own script wants.
+  const root = !!args.path ? requireDir(args.path) : undefined;
+  const at = (target: string): string => (!root ? target : path.resolve(root, target));
+
+  const entries = args.entries.map(at);
+  const out = at(args.out);
+  const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api");
+
+  const bundle = !!args.serializer ? loadBundle(args.serializer, root) : null;
   const serializer = bundle ? bundle.Serializer : null;
   const files: FileMap = {};
 
   const needsModel = args.md || args.json || args.jsonDefinition === "ast" || args.llmGuide;
   if (needsModel) {
     if (!!serializer) setJsonObj(serializer);
-    const model = buildModel(args.entries, {
+    const model = buildModel(entries, {
       target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
     });
     if (!model) return 1;
-    if (args.json) Object.assign(files, buildDocModelJSON(model, args.out));
+    if (args.json) Object.assign(files, buildDocModelJSON(model, out));
     if (args.md) {
       Object.assign(files, buildMDFiles(model.classes, model.pmes, {
         product: args.product,
-        fileNames: args.entries,
-        outputDir: args.mdOut || path.join(args.out, "api"),
+        fileNames: entries,
+        outputDir: mdOut,
         sourceBaseUrl: args.sourceBaseUrl
       }));
     }
-    if (args.jsonDefinition === "ast") Object.assign(files, buildJSONDefinitionAST(model, args.out));
+    if (args.jsonDefinition === "ast") Object.assign(files, buildJSONDefinitionAST(model, out));
     if (args.llmGuide) {
       const guide = buildLLMGuide(model, <any>bundle, {
-        outputDir: args.out,
-        fileNames: args.entries,
+        outputDir: out,
+        fileNames: entries,
         product: args.product,
         sourceBaseUrl: args.sourceBaseUrl,
         maxBytes: args.maxBytes,
@@ -213,7 +234,7 @@ function generateDoc(args: DocArgs): number {
     }
   }
   if (args.jsonDefinition === "runtime") {
-    files[path.join(resolveDir(args.out), "surveyjs_definition.json")] =
+    files[path.join(resolveDir(out), "surveyjs_definition.json")] =
       buildJSONDefinitionRuntime(serializer);
   }
 
@@ -251,6 +272,12 @@ function main(): void {
     }
     throw new UsageError("Unknown command: " + command);
   } catch (error) {
+    // A --path that is not there is the caller's mistake, and the message names the
+    // folder: report it like a usage error, without the usage text or a stack.
+    if (error instanceof ProductRootError) {
+      console.error(error.message);
+      process.exit(2);
+    }
     const usage = error instanceof UsageError || error instanceof TranslateUsageError;
     console.error(usage ? String(error.message) : String(error instanceof Error ? error.stack : error));
     if (usage) console.error("\n" + USAGE);

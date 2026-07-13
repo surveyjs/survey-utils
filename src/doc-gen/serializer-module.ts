@@ -29,8 +29,8 @@ export interface SurveyBundle {
  * installed first -- the wrappers that used to require it got away without one
  * only by accident.
  */
-export function loadSerializer(modulePath: string): any {
-  return loadBundle(modulePath).Serializer;
+export function loadSerializer(modulePath: string, base?: string): any {
+  return loadBundle(modulePath, base).Serializer;
 }
 
 /**
@@ -40,9 +40,9 @@ export function loadSerializer(modulePath: string): any {
  * metadata, and they have to come from the *same* module instance: a second
  * require() of the same bundle would re-run its registration side effects.
  */
-export function loadBundle(modulePath: string): SurveyBundle {
+export function loadBundle(modulePath: string, base?: string): SurveyBundle {
   installDom();
-  const required = require(resolveModule(modulePath));
+  const required = require(resolveModule(modulePath, base));
   const mod = required && !required.Serializer && required.default ? required.default : required;
   const serializer = mod && mod.Serializer;
   if (!serializer) {
@@ -54,14 +54,18 @@ export function loadBundle(modulePath: string): SurveyBundle {
   return mod;
 }
 
-/** Paths resolve against the working directory; bare names resolve as node modules of it. */
-function resolveModule(modulePath: string): string {
+/**
+ * Paths resolve against `base` -- the repo root `--path` named, or the working
+ * directory; bare names resolve as node modules of it.
+ */
+function resolveModule(modulePath: string, base?: string): string {
+  const from = base || process.cwd();
   if (path.isAbsolute(modulePath)) return modulePath;
   if (modulePath.indexOf("./") === 0 || modulePath.indexOf("../") === 0
     || modulePath.indexOf(".\\") === 0 || modulePath.indexOf("..\\") === 0) {
-    return path.resolve(process.cwd(), modulePath);
+    return path.resolve(from, modulePath);
   }
-  return require.resolve(modulePath, { paths: [process.cwd()] });
+  return require.resolve(modulePath, { paths: [from] });
 }
 
 /**

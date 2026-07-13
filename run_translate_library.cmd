@@ -1,1 +1,1 @@
-node ./dist/translateLibrary.js
+node ./dist/translateLibrary.js %*

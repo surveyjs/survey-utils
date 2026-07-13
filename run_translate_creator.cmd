@@ -1,1 +1,1 @@
-node ./dist/translateCreator.js
+node ./dist/translateCreator.js %*

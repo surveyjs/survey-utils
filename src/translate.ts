@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
-import { isAbsolute, join, resolve } from "path";
+import { join } from "path";
+import { ProductRootError, productRoot } from "./paths";
 import { setTranslationKey } from "./localization-utils";
 import { translateFiles } from "./index";
 
@@ -8,22 +9,35 @@ import { translateFiles } from "./index";
  *
  *   survey-utils translate library
  *   survey-utils translate creator --key <azure translator subscription key>
- *   survey-utils translate --path ./src/localization --key <key>
+ *   survey-utils translate library --path ../../LibV3/survey-library
  *
  * The key may also come from TRANSLATION_API_KEY (environment or .env); --key wins.
  *
- * Without --path, the localization folder is looked up next to this package -- the
- * layout of a local SurveyJS checkout, where survey-utils sits beside survey-library,
- * survey-creator and survey-analytics. A product installed from npm has no such
- * siblings, so it passes --path instead.
+ * `--path` is the root of the product's repo -- the same thing it means in every other
+ * command -- and the product's localization folder is joined onto it. Without --path
+ * the repo is looked up next to this package, the layout of a local SurveyJS checkout.
+ * A product that calls the bin from its own package.json has no such siblings, so it
+ * passes --path.
  */
 
-/** Localization folder of each known product, relative to the SurveyJS checkout root. */
-const productPaths: { [name: string]: string } = {
-  library: "survey-library/packages/survey-core/src/localization",
-  creator: "survey-creator/packages/survey-creator-core/src/localization",
-  "creator-presets": "survey-creator/packages/survey-creator-core/src/ui-preset-editor/localization",
-  analytics: "survey-analytics/src/analytics-localization",
+/** Where each product keeps its locale files, relative to the root of its repo. */
+const productPaths: { [name: string]: { repo: string; localization: string } } = {
+  library: {
+    repo: "survey-library",
+    localization: "packages/survey-core/src/localization",
+  },
+  creator: {
+    repo: "survey-creator",
+    localization: "packages/survey-creator-core/src/localization",
+  },
+  "creator-presets": {
+    repo: "survey-creator",
+    localization: "packages/survey-creator-core/src/ui-preset-editor/localization",
+  },
+  analytics: {
+    repo: "survey-analytics",
+    localization: "src/analytics-localization",
+  },
 };
 
 export const translateProducts = Object.keys(productPaths);
@@ -31,13 +45,13 @@ export const translateProducts = Object.keys(productPaths);
 export class TranslateUsageError extends Error { }
 
 interface TranslateArgs {
-  product?: string;
+  product: string;
   path?: string;
   key?: string;
 }
 
 function parseArgs(args: string[]): TranslateArgs {
-  const res: TranslateArgs = {};
+  const res: Partial<TranslateArgs> = {};
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     const value = (): string => {
@@ -57,32 +71,34 @@ function parseArgs(args: string[]): TranslateArgs {
       res.product = arg;
     }
   }
-  if (!res.product && !res.path) {
-    throw new TranslateUsageError("No product. Known products: " + translateProducts.join(", ")
-      + ". Or name a localization folder with --path <dir>.");
+  // --path is a repo root, not a locale folder, so it cannot name the product by itself.
+  if (!res.product) {
+    throw new TranslateUsageError("No product. Known products: " + translateProducts.join(", "));
   }
-  if (!!res.product && !productPaths[res.product]) {
+  if (!productPaths[res.product]) {
     throw new TranslateUsageError("Unknown product: " + res.product + ". Known: " + translateProducts.join(", "));
   }
-  return res;
-}
-
-function getLocalizationPath(args: TranslateArgs): string {
-  if (!!args.path) {
-    return isAbsolute(args.path) ? args.path : resolve(process.cwd(), args.path);
-  }
-  // dist/ -> the package -> the checkout root the sibling products live in.
-  return join(__dirname, "..", "..", productPaths[args.product as string]);
+  return <TranslateArgs>res;
 }
 
 export function runTranslate(args: string[]): number {
   const parsed = parseArgs(args);
   if (!!parsed.key) setTranslationKey(parsed.key);
 
-  const path = getLocalizationPath(parsed);
+  const product = productPaths[parsed.product];
+  let path: string;
+  try {
+    path = join(productRoot(product.repo, parsed.path), product.localization);
+  } catch (error) {
+    // The checkout is not where we looked. The message says where; a stack adds nothing.
+    if (!(error instanceof ProductRootError)) throw error;
+    console.error(error.message);
+    return 1;
+  }
   if (!existsSync(path)) {
-    console.error("Localization folder not found: " + path
-      + (!!parsed.path ? "" : "\nPass --path <dir> when the product is not checked out next to survey-utils."));
+    console.error(`Localization folder not found: ${path}\n`
+      + `--path must name the root of the ${product.repo} checkout, which holds `
+      + `${product.localization}.`);
     return 1;
   }
   translateFiles(path);

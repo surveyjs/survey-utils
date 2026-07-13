@@ -1,7 +1,7 @@
 import {
-  checkProduct, formatDeadStrings, formatErrors, formatSummary, products, ProductRootError,
-  resolveProductName,
+  checkProduct, formatDeadStrings, formatErrors, formatSummary, products, resolveProductName,
 } from "./loc-lint";
+import { ProductRootError } from "./paths";
 
 /**
  * Reports localization strings that no product source reaches any more.

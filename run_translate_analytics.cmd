@@ -1,1 +1,1 @@
-node ./dist/translateAnalytics.js
+node ./dist/translateAnalytics.js %*

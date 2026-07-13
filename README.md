@@ -26,6 +26,7 @@ survey-utils/
 ├── src/
 │   ├── cli.ts                  # The `survey-utils` bin: translate, check-strings, generate-doc
 │   ├── index.ts                # Package exports (see "The package exports" below)
+│   ├── paths.ts                # What --path means: the repo root, for every command
 │   ├── translate.ts            # translate: product -> localization folder, --key, --path
 │   ├── translateLibrary.ts     # Per-product entry points, kept for the run_translate_*.cmd
 │   ├── translateCreator.ts     #   files; the CLI is the supported route
@@ -58,12 +59,34 @@ survey-utils/
 └── package.json
 ```
 
-`translate` and `check-strings` expect the SurveyJS repos to sit **side by side** — the folder
-that holds `survey-utils` also holds `survey-library`, `survey-creator` and `survey-analytics`.
-That is how they find a product without being told where it is. **`--path <dir>` overrides that
-lookup** on both commands, so a checkout anywhere on disk can be used: for `check-strings` it is
-the product's repo root, for `translate` the localization folder itself. `generate-doc` takes
-every path from the caller already, so it has no `--path`.
+## 📍 `--path <dir>` — where the repo is
+
+`--path` means **one thing in all three commands: the root of the product's repo** — the folder
+that holds its `package.json`, not a folder inside it. Each command joins its own subfolders onto
+that root, so nothing else about the layout has to be typed:
+
+```bash
+survey-utils check-strings library --path ../../LibV3/survey-library
+survey-utils translate     library --path ../../LibV3/survey-library
+survey-utils generate-doc  packages/survey-core/entries/chunks/model.ts --md \
+                                   --path ../../LibV3/survey-library
+```
+
+| Command | What it joins onto the root |
+| --- | --- |
+| `check-strings` | The locale file, the source roots and the built bundle (`packages/survey-core/…`). Only `allowlists/<product>.json` stays in survey-utils. |
+| `translate` | The product's localization folder (`library` → `packages/survey-core/src/localization`). |
+| `generate-doc` | Every relative path the caller passed: `<entry...>`, `--serializer`, `--out`, `--md-out`. |
+
+Without `--path`, `translate` and `check-strings` expect the SurveyJS repos to sit **side by
+side** — the folder that holds `survey-utils` also holds `survey-library`, `survey-creator` and
+`survey-analytics`. That is how they find a product without being told where it is. `generate-doc`
+falls back to the working directory instead, which is what a product's own `package.json` script
+wants.
+
+A `--path` is one repo, so it cannot answer for a run over several products: `check-strings
+--path <dir>` with no product named is rejected, and `translate` requires the product too. A
+`--path` that is not there fails with the folder it looked in, before anything is read or written.
 
 ## 🔨 Build and test
 
@@ -176,16 +199,11 @@ so the bare `survey-utils` name resolves. Every path a command takes is resolved
 }
 ```
 
-Two commands behave differently once installed, and it matters:
-
-- **`generate-doc`** takes every path from the caller, so it works from an installed dependency
-  as-is. This is the command products will actually put in their `package.json`.
-- **`translate`** looks the product's localization folder up next to `survey-utils` unless
-  `--path` says otherwise. An installed dependency has no such siblings, so a `package.json`
-  entry **must pass `--path`**.
-- **`check-strings`** locates the product as a sibling of `survey-utils` unless `--path` names
-  the repo root. From a product's own `package.json` that root is the working directory's repo —
-  `survey-utils check-strings library --path ../..` from `packages/survey-core`.
+An installed dependency has no sibling checkouts, so `translate` and `check-strings` cannot find
+the product by looking next to themselves: both need **`--path`**, and from a package inside a
+monorepo it is the repo root above it — `--path ../..` from `packages/survey-core`. `generate-doc`
+needs none: without `--path` its paths resolve against the working directory, which is exactly the
+package the script runs in.
 
 Nothing has been cut over yet — no product depends on `survey-utils`, and
 [surveyjs-doc-generator](https://github.com/surveyjs/surveyjs-doc-generator) still ships to every
@@ -212,16 +230,19 @@ release and a missing one aborts the check with an explanatory message.
     // and did not regenerate. Output is deterministic, so two runs are byte-identical.
     "doc_gen:check": "npm run doc_gen -- --check",
 
-    // Localization. --path is required: the folder cannot be found from node_modules.
+    // Localization. --path is the repo root: the product cannot be found from node_modules.
     // No key here: it comes from TRANSLATION_API_KEY (environment, or a .env in THIS package).
     // See "Setting up the translation key" above.
-    "translate": "survey-utils translate --path ./src/localization"
+    "translate": "survey-utils translate library --path ../..",
+
+    // The unused-string check, over the same repo root.
+    "check:unused-strings": "survey-utils check-strings library --path ../.."
   }
 }
 ```
 
-`check-strings library` (survey-core's flat `englishStrings` table) runs from the checkout:
-`node ./dist/cli.js check-strings library`, or `run_check_unused_strings_library.cmd`.
+From this checkout the same check needs no `--path`: `node ./dist/cli.js check-strings library`,
+or `run_check_unused_strings_library.cmd`.
 
 ### `creator` — survey-creator / packages/survey-creator-core
 
@@ -239,26 +260,28 @@ because it reads the property grid, question types and logic types from the bund
     "doc_gen": "survey-utils generate-doc src/entries/index.ts --md",
     "doc_gen:check": "npm run doc_gen -- --check",
 
-    "translate": "survey-utils translate --path ./src/localization"
+    "translate": "survey-utils translate creator --path ../..",
+    "check:unused-strings": "survey-utils check-strings creator --path ../.."
   }
 }
 ```
 
 ### `creator-presets` — the creator's UI presets
 
-A second localization folder in the same package, translated on its own. It has no docs and no
-string check — only `translate`.
+A second localization folder in the same package (`src/ui-preset-editor/localization`), translated
+on its own. It has no docs and no string check — only `translate`, and it is a product of its own
+precisely because the repo root cannot tell the two folders apart.
 
 ```jsonc
 // survey-creator/packages/survey-creator-core/package.json
 {
   "scripts": {
-    "translate:presets": "survey-utils translate --path ./src/ui-preset-editor/localization"
+    "translate:presets": "survey-utils translate creator-presets --path ../.."
   }
 }
 ```
 
-From the checkout it is a named product: `node ./dist/cli.js translate creator-presets`.
+From the checkout: `node ./dist/cli.js translate creator-presets`.
 
 ### `analytics` — survey-analytics (the Dashboard)
 
@@ -268,11 +291,14 @@ behind Plotly, which will not import under Node, so its resolver is static (see
 **`dashboard`**, the name it was registered under first — both spellings select the same product,
 and an alias never makes it run twice in a whole-repo check.
 
+Its package *is* its repo root, so `--path .` is what the scripts pass.
+
 ```jsonc
 // survey-analytics/package.json
 {
   "scripts": {
-    "translate": "survey-utils translate --path ./src/analytics-localization"
+    "translate": "survey-utils translate analytics --path .",
+    "check:unused-strings": "survey-utils check-strings analytics --path ."
   }
 }
 ```
@@ -302,12 +328,10 @@ survey-utils check-strings                        # every known product
 survey-utils check-strings library --path ../../LibV3/survey-library
 ```
 
-`--path` is the **root of the product's repo** — the folder that holds its `package.json`, e.g.
-`survey-library`, not `survey-library/packages/survey-core`. Everything the check reads (the
-locale file, the source roots, the built bundle) is found under it; only `allowlists/<product>.json`
-stays in survey-utils. One `--path` is one repo, so name the product it belongs to: a bare
-`check-strings --path <dir>` over all three products is rejected. The `run_check_unused_strings_*.cmd`
-files forward their arguments, so `run_check_unused_strings_library.cmd --path <dir>` works too.
+`--path` is the repo root, as everywhere ([above](#-path-dir--where-the-repo-is)): everything the
+check reads — the locale file, the source roots, the built bundle — is found under it, and only
+`allowlists/<product>.json` stays in survey-utils. The `run_*.cmd` files forward their arguments,
+so `run_check_unused_strings_library.cmd --path <dir>` works too.
 
 ```
 library:   0 new unused string(s), 0 known dead, 0 dynamic exemption(s).
