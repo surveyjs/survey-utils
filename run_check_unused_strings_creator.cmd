@@ -1,1 +1,1 @@
-node ./dist/checkUnusedStrings.js creator
+node ./dist/checkUnusedStrings.js creator %*

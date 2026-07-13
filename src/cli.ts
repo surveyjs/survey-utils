@@ -6,6 +6,7 @@ import {
   buildJSONDefinitionRuntime, loadBundle, setJsonObj, diffFiles, writeFiles, resolveDir, FileMap
 } from "./doc-gen";
 import { runCheckUnusedStrings } from "./checkUnusedStrings";
+import { products } from "./loc-lint";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 
 const USAGE = `survey-utils <command> [options]
@@ -49,7 +50,15 @@ survey-utils generate-doc <entry...> [options]
   --out <dir>               Output root. Default: ./docs
   --check                   Generate in memory, diff against what is on disk, exit 1 if they differ.
 
-survey-utils check-strings [product] [--list-dead]
+survey-utils check-strings [product] [--list-dead] [--path <dir>]
+
+  [product]                 ${Object.keys(products).join(" | ")}. Default: every one of them.
+
+  --list-dead               Print the cleanup backlog: strings already recorded as dead.
+  --path <dir>              Root of the product's checkout (the folder with its package.json),
+                            resolved against the working directory. Overrides the default,
+                            which is the repo next to survey-utils in a local SurveyJS
+                            checkout. It names one repo, so name the product with it.
 
 survey-utils translate <product> [--key <key>] [--path <dir>]
 
@@ -60,6 +69,9 @@ survey-utils translate <product> [--key <key>] [--path <dir>]
   --path <dir>              Localization folder to translate, resolved against the working
                             directory. Overrides the product's default folder, which is
                             looked up next to survey-utils in a local SurveyJS checkout.
+
+generate-doc takes every path from the caller (entries, --serializer, --out), so it needs
+no --path.
 `;
 
 interface DocArgs {

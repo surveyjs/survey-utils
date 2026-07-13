@@ -1,1 +1,1 @@
-node ./dist/checkUnusedStrings.js library
+node ./dist/checkUnusedStrings.js library %*

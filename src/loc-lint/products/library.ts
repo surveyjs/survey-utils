@@ -1,11 +1,10 @@
 import * as path from "path";
 import { installDom } from "../dom";
-import { allowlistPath, readAllowlist, requireBundle, siblingRepo } from "../paths";
+import { allowlistPath, productRoot, readAllowlist, requireBundle } from "../paths";
 import { KeyResolver, LocLintProduct } from "../types";
 
 const PRODUCT = "library";
-const surveyCore = siblingRepo("survey-library", "packages", "survey-core");
-const bundlePath = path.join(surveyCore, "build", "survey.core.js");
+const REPO = "survey-library";
 const buildHint = "cd packages/survey-core && npm run build   (in the survey-library repo)";
 
 /**
@@ -19,7 +18,7 @@ const buildHint = "cd packages/survey-core && npm run build   (in the survey-lib
  * first access of the `loc<Name>` getter, and many localizable properties are
  * `@property` decorators that never reach the Serializer's property list.
  */
-function collectLocalizationNames(): Set<string> {
+function collectLocalizationNames(bundlePath: string): Set<string> {
   installDom();
   const core = requireBundle(bundlePath, buildHint);
   const { Serializer, ElementFactory, SurveyModel } = core;
@@ -62,9 +61,10 @@ function collectLocalizationNames(): Set<string> {
   return names;
 }
 
-export function createLibraryProduct(): LocLintProduct {
-  const localizationNames = collectLocalizationNames();
-  const pkg = (name: string, ...rest: Array<string>) => siblingRepo("survey-library", "packages", name, ...rest);
+export function createLibraryProduct(root?: string): LocLintProduct {
+  const repo = productRoot(REPO, root);
+  const pkg = (name: string, ...rest: Array<string>) => path.join(repo, "packages", name, ...rest);
+  const localizationNames = collectLocalizationNames(pkg("survey-core", "build", "survey.core.js"));
 
   // Flat keys: the whole key is one segment, so a single catch-all resolver
   // handles the entire table.

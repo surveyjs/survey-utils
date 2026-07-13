@@ -1,1 +1,1 @@
-node ./dist/checkUnusedStrings.js dashboard
+node ./dist/checkUnusedStrings.js dashboard %*

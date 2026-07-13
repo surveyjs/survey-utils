@@ -17,10 +17,13 @@ import { createAnalyticsProduct } from "./products/analytics";
  * building the registries requires loading (and sometimes instantiating) the
  * product's bundle -- too expensive to do for a product nobody asked for.
  *
+ * The factory takes the root of the product's repo (`--path <dir>`); without it
+ * the repo is looked up as a sibling of survey-utils.
+ *
  * To add survey-pdf, drop a module into `products/` that exports a
  * `LocLintProduct` and register it here.
  */
-export const products: Record<string, () => LocLintProduct> = {
+export const products: Record<string, (root?: string) => LocLintProduct> = {
   library: createLibraryProduct,
   creator: createCreatorProduct,
   analytics: createAnalyticsProduct,

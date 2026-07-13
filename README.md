@@ -60,7 +60,10 @@ survey-utils/
 
 `translate` and `check-strings` expect the SurveyJS repos to sit **side by side** — the folder
 that holds `survey-utils` also holds `survey-library`, `survey-creator` and `survey-analytics`.
-That is how they find a product without being told where it is.
+That is how they find a product without being told where it is. **`--path <dir>` overrides that
+lookup** on both commands, so a checkout anywhere on disk can be used: for `check-strings` it is
+the product's repo root, for `translate` the localization folder itself. `generate-doc` takes
+every path from the caller already, so it has no `--path`.
 
 ## 🔨 Build and test
 
@@ -180,9 +183,9 @@ Two commands behave differently once installed, and it matters:
 - **`translate`** looks the product's localization folder up next to `survey-utils` unless
   `--path` says otherwise. An installed dependency has no such siblings, so a `package.json`
   entry **must pass `--path`**.
-- **`check-strings`** always locates the product as a sibling of `survey-utils`, and has no
-  `--path`. It is therefore a **checkout-only** command today: run it from this repo (or its
-  `run_*.cmd`), not from a product's `package.json`.
+- **`check-strings`** locates the product as a sibling of `survey-utils` unless `--path` names
+  the repo root. From a product's own `package.json` that root is the working directory's repo —
+  `survey-utils check-strings library --path ../..` from `packages/survey-core`.
 
 Nothing has been cut over yet — no product depends on `survey-utils`, and
 [surveyjs-doc-generator](https://github.com/surveyjs/surveyjs-doc-generator) still ships to every
@@ -294,7 +297,17 @@ for that one migration step.
 survey-utils check-strings analytics              # verdict + summary
 survey-utils check-strings creator --list-dead    # print the cleanup backlog
 survey-utils check-strings                        # every known product
+
+# a checkout that is not a sibling of survey-utils
+survey-utils check-strings library --path ../../LibV3/survey-library
 ```
+
+`--path` is the **root of the product's repo** — the folder that holds its `package.json`, e.g.
+`survey-library`, not `survey-library/packages/survey-core`. Everything the check reads (the
+locale file, the source roots, the built bundle) is found under it; only `allowlists/<product>.json`
+stays in survey-utils. One `--path` is one repo, so name the product it belongs to: a bare
+`check-strings --path <dir>` over all three products is rejected. The `run_check_unused_strings_*.cmd`
+files forward their arguments, so `run_check_unused_strings_library.cmd --path <dir>` works too.
 
 ```
 library:   0 new unused string(s), 0 known dead, 0 dynamic exemption(s).
@@ -363,12 +376,16 @@ roots, one resolver per dynamically built namespace, an allowlist), then registe
 `src/loc-lint/index.ts`:
 
 ```ts
-export const products: Record<string, () => LocLintProduct> = {
+export const products: Record<string, (root?: string) => LocLintProduct> = {
   library: createLibraryProduct,     // survey-core
   creator: createCreatorProduct,     // survey-creator-core
   analytics: createAnalyticsProduct, // survey-analytics
 };
 ```
+
+The factory's `root` is what `--path` passed. Build every path in the product module under it —
+`productRoot(repo, root)` in [paths.ts](src/loc-lint/paths.ts) resolves it, falling back to the
+sibling checkout and failing with an actionable message when the folder is not there.
 
 The key is the name callers type and the name of the product's `allowlists/<name>.json`. When a
 product is renamed, keep the old name working by adding it to `productAliases` in the same file

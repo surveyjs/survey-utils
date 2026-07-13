@@ -1,9 +1,9 @@
 import * as path from "path";
-import { allowlistPath, readAllowlist, siblingRepo } from "../paths";
+import { allowlistPath, productRoot, readAllowlist } from "../paths";
 import { KeyResolver, LocLintProduct } from "../types";
 
 const PRODUCT = "analytics";
-const analyticsSrc = siblingRepo("survey-analytics", "src");
+const REPO = "survey-analytics";
 
 /**
  * survey-analytics (the Dashboard) builds several keys dynamically from a small
@@ -50,7 +50,8 @@ const anyKey: KeyResolver = (key, _segments, context) => {
   return false;
 };
 
-export function createAnalyticsProduct(): LocLintProduct {
+export function createAnalyticsProduct(root?: string): LocLintProduct {
+  const analyticsSrc = path.join(productRoot(REPO, root), "src");
   return {
     name: PRODUCT,
     referenceLocaleFile: path.join(analyticsSrc, "analytics-localization", "english.ts"),
