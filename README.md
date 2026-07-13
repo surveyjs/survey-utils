@@ -118,6 +118,83 @@ Reports localization keys that no product source reaches any more, and exits wit
 `1` so CI fails when a newly added string is never used. See
 [Unused-String Check (loc-lint)](#-unused-string-check-loc-lint) below.
 
+### 🤖 Survey JSON: the schema and the LLM guide
+
+`generate-doc` emits two artifacts for the survey JSON, both derived from survey-core alone.
+**The schema constrains and verifies; the guide teaches.** Generate with the guide, validate
+with the schema.
+
+| Artifact | Flag | What it is |
+| --- | --- | --- |
+| `surveyjs_definition.json` | `--json-definition` | The JSON Schema, from `Serializer.generateSchema()`. Validate JSON that an LLM, a developer or the Creator produced. |
+| `llm-guide.md` | `--llm-guide` | The authoring guide you give a model as context so the SurveyJS JSON it writes loads and behaves. Also emits `llms.txt`, listing both. |
+
+```bash
+# From packages/survey-core, with the bundle already built:
+node ../../../survey-utils/dist/cli.js generate-doc ./entries/chunks/model.ts \
+  --serializer ./build/survey.core --llm-guide --json-definition --out ./docs
+```
+
+**survey-core must be built first.** The generator reads it twice: the built bundle
+(`--serializer ./build/survey.core`) for the metadata — question types, properties, defaults —
+and the TypeScript sources under `src/` for the JSDoc. A stale bundle produces a guide that
+documents the previous release.
+
+The expression operators come from the sources too, and deliberately so. They are declared as
+static object literals inside `expressions.ts` — values in a file, not API members — so
+[`operators.ts`](src/doc-gen/operators.ts) reads their names off its AST rather than asking
+survey-core to export the internal class that holds them. A documentation generator should not
+cost the library a permanent public-API commitment.
+
+The source only supplies the candidate names. Which of them an author may actually write, and how
+it is spelled, is settled by `ConditionsParser`, which survey-core already exports: a spelling it
+rejects never reaches the guide, so the internal helpers drop out on their own, and `greater` is
+reported as `>` because that is what the library renders it as.
+
+Every fact in both files is extracted at generation time. There are **no hand-maintained
+tables** of types, properties, descriptions, operators or examples: those rot the moment
+survey-core changes, and a stale guide teaches a model to write JSON that no longer loads.
+The only fixed prose is a ~10-line block of output rules, in one constant in
+[`llm-guide.ts`](src/doc-gen/llm-guide.ts). Every JSON snippet is built through the library's
+own API, serialized with `toJSON()`, and then validated, loaded with `new SurveyModel(json)`
+and re-serialized — a snippet that fails is never emitted.
+
+#### Wiring `--check` into CI
+
+Generation is deterministic — stable key order, 2-space indent, LF, no timestamps — so two
+runs are byte-identical. `--check` regenerates in memory, diffs against what is on disk and
+exits `1` when they differ, which fails the build when someone changes survey-core and does
+not regenerate:
+
+```bash
+node ./dist/cli.js generate-doc ./entries/chunks/model.ts \
+  --serializer ./build/survey.core --llm-guide --json-definition --out ./docs --check
+```
+
+#### Three things worth knowing
+
+**`generateSchema()` cannot catch an unknown question type.** It never emits a schema for
+`elements`, so the per-type definitions it generates are unreachable when a survey is
+validated: `{"type": "radio"}` — which is not a SurveyJS type — validates clean. The schema
+still checks the survey's own properties and their types. Because of this the generator does
+not rely on it alone; it also checks every snippet's `type` strings against
+`ElementFactory.getAllTypes()` and round-trips the JSON through `SurveyModel`. Fixing this
+properly belongs in survey-core, not here.
+
+**Property ordering is weaker than it could be.** `JsonObjectProperty.category` is the field
+that would sort "data/logic" above "appearance", but survey-core never sets it — the
+categories live in survey-creator's property grid, and the survey-core-only rule puts them out
+of reach. The guide sorts on the proxies that *are* in the library: required first, then
+structural properties, then expression-valued ones, then enums, then whatever is documented.
+A better signal exists in survey-creator and is deliberately not used.
+
+**The size budget.** The guide is spent from a context window, so every run logs its bytes and
+approximate token count, and the run fails above `--max-bytes` (default 96 KB). The question
+types, the shared bases and the survey/page shell come to ~57 KB; the triggers, validators and
+nested objects an author also has to get right add ~16 KB more. `--split` emits one file per
+question type instead, for a reader that retrieves rather than reads it all, and
+`--with-member-links` adds member-level API links there.
+
 ## 📖 Overview
 
 Survey Utils provides tools for managing localization files, extracting and manipulating comments in JSON translation files, and automating translation workflows for SurveyJS applications.

@@ -5,9 +5,22 @@ export {
 } from "./generator";
 export {
   generateMDFiles, buildMDFiles, generateIndexMD, generateMDForClass,
-  detectProduct, sourceUrl, isVisibleMember, firstSentence, stripMarkdownLinks,
   MDGenerationOptions
 } from "./md-generator";
-export { loadSerializer, buildJSONDefinitionRuntime } from "./serializer-module";
+export {
+  detectProduct, sourceUrl, isVisibleMember, firstSentence, stripMarkdownLinks,
+  demoLinks, summary
+} from "./doc-utils";
+export {
+  loadSerializer, loadBundle, buildJSONDefinitionRuntime, SurveyBundle
+} from "./serializer-module";
+export {
+  buildFacts, SurveyFacts, ClassFact, ClassKind, PropertyFact
+} from "./survey-facts";
+export {
+  extractOperators, readOperatorNames, wordlessOperators, OperatorFact, OperatorNames
+} from "./operators";
+export { buildExamples, createChecker, Example, ExampleSet, Checker } from "./examples";
+export { buildLLMGuide, LLMGuideOptions, LLMGuideResult } from "./llm-guide";
 export { DocEntry, DocEntryType, FileMap } from "./types";
 export { writeFiles, diffFiles, resolveDir } from "./file-utils";

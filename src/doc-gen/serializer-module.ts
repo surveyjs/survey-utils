@@ -2,6 +2,26 @@ import * as path from "path";
 import { installDom } from "../loc-lint/dom";
 
 /**
+ * The parts of the built survey-core bundle the emitters read. Every fact in the
+ * generated artifacts comes from one of these -- see promts/01-schema-and-llm-guide.md.
+ */
+export interface SurveyBundle {
+  Serializer: any;
+  /** Question types. Absent in products that are not survey-core. */
+  ElementFactory?: any;
+  /** Expression functions. */
+  FunctionFactory?: any;
+  /**
+   * Parses an expression. This is what settles which operator spellings are real and how they
+   * are written; the candidate names are read from survey-core's source, because the class
+   * that holds them is internal and is not worth making public for a docs generator.
+   */
+  ConditionsParser?: any;
+  /** Round-trips the generated examples, proving the guide teaches loadable JSON. */
+  SurveyModel?: any;
+}
+
+/**
  * Loads the built product bundle named by `--serializer` (e.g. ./build/survey.core)
  * and returns its `Serializer`.
  *
@@ -10,16 +30,28 @@ import { installDom } from "../loc-lint/dom";
  * only by accident.
  */
 export function loadSerializer(modulePath: string): any {
+  return loadBundle(modulePath).Serializer;
+}
+
+/**
+ * The whole bundle, not just its Serializer.
+ *
+ * The LLM guide needs the factories and the expression machinery alongside the
+ * metadata, and they have to come from the *same* module instance: a second
+ * require() of the same bundle would re-run its registration side effects.
+ */
+export function loadBundle(modulePath: string): SurveyBundle {
   installDom();
-  const mod = require(resolveModule(modulePath));
-  const serializer = mod && (mod.Serializer || (mod.default && mod.default.Serializer));
+  const required = require(resolveModule(modulePath));
+  const mod = required && !required.Serializer && required.default ? required.default : required;
+  const serializer = mod && mod.Serializer;
   if (!serializer) {
     throw new Error(
       "Module '" + modulePath + "' does not export a Serializer. "
       + "Point --serializer at the built product bundle, e.g. ./build/survey.core"
     );
   }
-  return serializer;
+  return mod;
 }
 
 /** Paths resolve against the working directory; bare names resolve as node modules of it. */

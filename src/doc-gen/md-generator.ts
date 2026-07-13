@@ -1,6 +1,12 @@
 import * as path from "path";
 import { DocEntry, DocEntryType, FileMap } from "./types";
 import { resolveDir, writeFiles } from "./file-utils";
+import {
+  detectProduct, sourceUrl, isVisibleMember, firstSentence, stripMarkdownLinks, hasDescription, oneLine
+} from "./doc-utils";
+
+// Re-exported: these used to live here, and the public API keeps naming md-generator as their home.
+export { detectProduct, sourceUrl, isVisibleMember, firstSentence, stripMarkdownLinks };
 
 export interface MDGenerationOptions {
   /**
@@ -18,48 +24,6 @@ export interface MDGenerationOptions {
   outputDir?: string;
   /** Value written into the `source` front-matter field (e.g. a base URL to the sources). */
   sourceBaseUrl?: string;
-}
-
-/** Keyword rules mapping an entry path (or working directory) to a product name. */
-const productRules: { product: string; keywords: string[] }[] = [
-  { product: "PDF Generator", keywords: ["pdf"] },
-  { product: "Survey Creator", keywords: ["creator"] },
-  { product: "Dashboard", keywords: ["dashboard", "analytics"] }
-];
-
-/**
- * Infers the product name from the entry file paths (and optionally the working
- * directory), e.g. `src/entries/pdf.ts` &rarr; "PDF Generator". Falls back to
- * "Form Library" when nothing matches.
- */
-export function detectProduct(fileNames?: string[], cwd?: string): string {
-  const parts: string[] = [];
-  if (Array.isArray(fileNames)) parts.push(...fileNames);
-  if (cwd) parts.push(cwd);
-  const haystack = parts.join(" ").replace(/\\/g, "/").toLowerCase();
-  for (let i = 0; i < productRules.length; i++) {
-    const rule = productRules[i];
-    if (rule.keywords.some((k) => haystack.indexOf(k) > -1)) return rule.product;
-  }
-  return "Form Library";
-}
-
-/** Product name &rarr; the library slug used in surveyjs.io documentation URLs. */
-const libraryNames: { [product: string]: string } = {
-  "Form Library": "form-library",
-  "Survey Creator": "survey-creator",
-  "Dashboard": "dashboard",
-  "PDF Generator": "pdf-generator"
-};
-
-/**
- * Builds the `source` front-matter URL, e.g.
- * `https://surveyjs.io/form-library/documentation/api-reference/surveymodel`.
- */
-export function sourceUrl(product: string, className: string, baseUrl?: string): string {
-  const base = (baseUrl || "https://surveyjs.io").replace(/\/+$/, "");
-  const library = libraryNames[product] || libraryNames["Form Library"];
-  return base + "/" + library + "/documentation/api-reference/" + (className || "").toLowerCase();
 }
 
 /**
@@ -141,25 +105,6 @@ function addIndexSection(
   }
 }
 
-/** True when the entry has a non-empty description. */
-function hasDescription(cls: DocEntry): boolean {
-  return !!cls && !!(cls.documentation || "").trim();
-}
-
-/** Replaces Markdown links `[label](url)` with just their `label`. */
-export function stripMarkdownLinks(text: any): string {
-  if (!text) return "";
-  return String(text).replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
-}
-
-/** Returns the first sentence (up to the first `.`/`!`/`?`) of a text. */
-export function firstSentence(text: any): string {
-  const line = oneLine(text);
-  if (!line) return "";
-  const match = line.match(/^.*?[.!?](?=\s|$)/);
-  return match ? match[0] : line;
-}
-
 function isClassOrInterface(cls: DocEntry): boolean {
   return !!cls
     && (cls.entryType === DocEntryType.classType || cls.entryType === DocEntryType.interfaceType);
@@ -188,11 +133,6 @@ export function generateMDForClass(
   if (methods.length > 0) parts.push(methodsSection(methods));
   if (events.length > 0) parts.push(eventsSection(events));
   return parts.join("\n\n") + "\n";
-}
-
-/** Members that belong in the API reference: not hidden, not protected, documented. */
-export function isVisibleMember(member: DocEntry): boolean {
-  return member.isHidden !== true && member.isProtected !== true && hasDescription(member);
 }
 
 function frontMatter(
@@ -321,12 +261,6 @@ function typeString(type: string | undefined, generics?: string[]): string {
     return base + "<" + generics.join(", ") + ">";
   }
   return base;
-}
-
-/** Collapses whitespace/newlines into a single line. */
-function oneLine(text: any): string {
-  if (!text) return "";
-  return String(text).replace(/\s+/g, " ").trim();
 }
 
 /** Escapes a value for use inside a Markdown table cell. */

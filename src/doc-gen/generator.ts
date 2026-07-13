@@ -17,6 +17,14 @@ export interface DocModel {
   pmes: DocEntry[];
   /** Class/PME lookups the AST JSON-definition emitter walks. */
   context: GenerationContext;
+  /**
+   * The sources the model was built from.
+   *
+   * An emitter that needs a fact the doc model does not carry -- the expression operators
+   * live in a static object literal, which is a value, not an API member -- can go back to
+   * the file it came from instead of reaching for a class survey-core does not export.
+   */
+  sourceFiles: string[];
 }
 
 export interface DocOptions {
@@ -54,9 +62,11 @@ export function buildModel(fileNames: string[], options: ts.CompilerOptions): Do
       vueGeneratedFiles: vueGeneratedFiles
     };
     // Visit every sourceFile in the program
+    const sourceFiles: string[] = [];
     for (const sourceFile of program.getSourceFiles()) {
       if (sourceFile.fileName.indexOf("node_modules") > 0) continue;
       if (isNonEnglishLocalizationFile(sourceFile.fileName)) continue;
+      sourceFiles.push(sourceFile.fileName);
       // Walk the tree to search for classes
       ts.forEachChild(sourceFile, (node: ts.Node) => visit(ctx, node));
     }
@@ -71,7 +81,9 @@ export function buildModel(fileNames: string[], options: ts.CompilerOptions): Do
     }
     updateEventsDocumentation(ctx);
     updateHiddenForEntriesDoc(ctx);
-    return { classes: ctx.outputClasses, pmes: ctx.outputPMEs, context: ctx };
+    return {
+      classes: ctx.outputClasses, pmes: ctx.outputPMEs, context: ctx, sourceFiles: sourceFiles
+    };
   } finally {
     deleteVueTSFiles(vueGeneratedFiles);
   }

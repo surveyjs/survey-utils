@@ -2,8 +2,8 @@
 import * as ts from "typescript";
 import * as path from "path";
 import {
-  buildModel, buildDocModelJSON, buildJSONDefinitionAST, buildMDFiles,
-  buildJSONDefinitionRuntime, loadSerializer, setJsonObj, diffFiles, writeFiles, resolveDir, FileMap
+  buildModel, buildDocModelJSON, buildJSONDefinitionAST, buildMDFiles, buildLLMGuide,
+  buildJSONDefinitionRuntime, loadBundle, setJsonObj, diffFiles, writeFiles, resolveDir, FileMap
 } from "./doc-gen";
 import { runCheckUnusedStrings } from "./checkUnusedStrings";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
@@ -31,11 +31,20 @@ survey-utils generate-doc <entry...> [options]
                             JSON Schema. 'runtime' (default) is Serializer.generateSchema() and
                             requires --serializer; 'ast' is the doc-generator's AST-derived
                             document of the same name -- a different, larger schema.
+  --llm-guide               llm-guide.md: the authoring guide an LLM is given as context so the
+                            SurveyJS JSON it writes loads. Needs --serializer. Also emits
+                            llms.txt, listing the guide and the schema.
 
   Markdown options:
   --product <name>          Front-matter product. Default: detected from the entry path.
   --md-out <dir>            Default: <out>/api
   --source-base-url <url>   Default: https://surveyjs.io
+
+  LLM guide options:
+  --max-bytes <n>           Fail when the guide exceeds this. Default: 98304 (96 KB).
+  --split                   Also emit one file per question type into <out>/llm-guide/.
+  --with-member-links       Member-level API links in the split files. Off by default: ~400
+                            links cost 6-10k tokens, and only a reader that can fetch them pays off.
 
   --out <dir>               Output root. Default: ./docs
   --check                   Generate in memory, diff against what is on disk, exit 1 if they differ.
@@ -59,6 +68,10 @@ interface DocArgs {
   md: boolean;
   json: boolean;
   jsonDefinition?: "runtime" | "ast";
+  llmGuide: boolean;
+  maxBytes?: number;
+  split: boolean;
+  withMemberLinks: boolean;
   product?: string;
   mdOut?: string;
   sourceBaseUrl?: string;
@@ -69,7 +82,10 @@ interface DocArgs {
 class UsageError extends Error { }
 
 function parseDocArgs(args: string[]): DocArgs {
-  const res: DocArgs = { entries: [], md: false, json: false, out: "docs", check: false };
+  const res: DocArgs = {
+    entries: [], md: false, json: false, llmGuide: false, split: false,
+    withMemberLinks: false, out: "docs", check: false
+  };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     const value = (): string => {
@@ -92,10 +108,15 @@ function parseDocArgs(args: string[]): DocArgs {
       }
       res.jsonDefinition = kind;
     } else if (arg === "--llm-guide") {
-      throw new UsageError(
-        "--llm-guide is not implemented yet: it is the deliverable of promts/01-schema-and-llm-guide.md, "
-        + "a third emitter over the same doc model."
-      );
+      res.llmGuide = true;
+    } else if (arg === "--split") {
+      res.split = true;
+    } else if (arg === "--with-member-links") {
+      res.withMemberLinks = true;
+    } else if (arg === "--max-bytes") {
+      const bytes = parseInt(value(), 10);
+      if (!(bytes > 0)) throw new UsageError("--max-bytes needs a positive number of bytes");
+      res.maxBytes = bytes;
     } else if (arg === "--serializer") {
       res.serializer = value();
     } else if (arg === "--product") {
@@ -115,9 +136,11 @@ function parseDocArgs(args: string[]): DocArgs {
   if (res.entries.length === 0) {
     throw new UsageError("No entry file. Example: survey-utils generate-doc ./entries/chunks/model.ts --md");
   }
-  if (!res.md && !res.json && !res.jsonDefinition) {
+  if (!res.md && !res.json && !res.jsonDefinition && !res.llmGuide) {
     // Deliberately not inheriting doc-generator's implicit markdown-or-JSON default.
-    throw new UsageError("No emitter selected. Pass at least one of --md, --json, --json-definition.");
+    throw new UsageError(
+      "No emitter selected. Pass at least one of --md, --json, --json-definition, --llm-guide."
+    );
   }
   if (res.jsonDefinition === "runtime" && !res.serializer) {
     throw new UsageError(
@@ -125,14 +148,24 @@ function parseDocArgs(args: string[]): DocArgs {
       + "built bundle. Use --json-definition=ast for the AST-derived document, which needs no bundle."
     );
   }
+  if (res.llmGuide && !res.serializer) {
+    throw new UsageError(
+      "--llm-guide needs --serializer: the question types, properties, operators and examples all "
+      + "come from the built bundle, e.g. --serializer ./build/survey.core"
+    );
+  }
+  if ((res.split || res.withMemberLinks) && !res.llmGuide) {
+    throw new UsageError("--split and --with-member-links only apply to --llm-guide.");
+  }
   return res;
 }
 
 function generateDoc(args: DocArgs): number {
-  const serializer = !!args.serializer ? loadSerializer(args.serializer) : null;
+  const bundle = !!args.serializer ? loadBundle(args.serializer) : null;
+  const serializer = bundle ? bundle.Serializer : null;
   const files: FileMap = {};
 
-  const needsModel = args.md || args.json || args.jsonDefinition === "ast";
+  const needsModel = args.md || args.json || args.jsonDefinition === "ast" || args.llmGuide;
   if (needsModel) {
     if (!!serializer) setJsonObj(serializer);
     const model = buildModel(args.entries, {
@@ -149,6 +182,23 @@ function generateDoc(args: DocArgs): number {
       }));
     }
     if (args.jsonDefinition === "ast") Object.assign(files, buildJSONDefinitionAST(model, args.out));
+    if (args.llmGuide) {
+      const guide = buildLLMGuide(model, <any>bundle, {
+        outputDir: args.out,
+        fileNames: args.entries,
+        product: args.product,
+        sourceBaseUrl: args.sourceBaseUrl,
+        maxBytes: args.maxBytes,
+        split: args.split,
+        withMemberLinks: args.withMemberLinks
+      });
+      Object.assign(files, guide.files);
+      console.log(
+        `LLM guide: ${(guide.bytes / 1024).toFixed(1)} KB, ~${guide.approxTokens} tokens; `
+        + `${guide.facts.documented} documented properties, ${guide.facts.undocumented} without JSDoc.`
+      );
+      guide.warnings.forEach((warning) => console.warn("warning: " + warning));
+    }
   }
   if (args.jsonDefinition === "runtime") {
     files[path.join(resolveDir(args.out), "surveyjs_definition.json")] =

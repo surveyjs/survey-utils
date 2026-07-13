@@ -73,7 +73,7 @@ Facts come from the doc model (AST + JSDoc) joined with the runtime bundle:
 | Triggers | `getChildrenClasses("trigger", true)` |
 | Validators | `getChildrenClasses("surveyvalidator", true)` |
 | Expression functions | `FunctionFactory.Instance.getAll()` |
-| Expression operators | keys of `OperandMaker.binaryFunctions` / `unaryFunctions` |
+| Expression operators | keys of `OperandMaker.binaryFunctions` / `unaryFunctions`, read from the **source** — see Constraints |
 | Demo links | the `[View Demo](https://surveyjs.io/...)` URLs **already inside survey-core's JSDoc** — 236 of them, 116 unique |
 
 **Examples are generated, not written.** Every JSON snippet is built in code
@@ -214,7 +214,13 @@ Budgeted, not sprinkled.
 
 - TypeScript strict, survey-utils' existing `tsconfig.json`. No new runtime deps beyond a JSON Schema
   validator for example-validation (`ajv` as a devDependency is fine — it runs in the generator and tests).
-- Do not modify survey-core. If `generateSchema()` has a real bug that blocks this, report it rather than
-  patching around it.
+- Do not modify survey-core. In particular **do not export `OperandMaker`** to reach the operator tables:
+  it is internal, nobody has asked for it in ten years, and exporting it would turn a docs generator's
+  convenience into a permanent public-API commitment. The operator names are *values in a source file*, not
+  API members, so read them off the AST of `expressions.ts` — a file this tool already parses for the JSDoc.
+  Which spellings are real, and how they are written (`greater` is `>`), is then settled by the already-public
+  `ConditionsParser`: a spelling it rejects is not an operator, so the internal helpers drop out on their own.
+  If a survey-core defect genuinely blocks this — including a real `generateSchema()` bug — report it rather
+  than patching around it.
 - No network access at generation time.
 - Comments state constraints, not narration — same bar as `loc-lint/products/library.ts`.
