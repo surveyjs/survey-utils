@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import { ProductRootError, productRoot } from "./paths";
-import { setTranslationKey } from "./localization-utils";
+import { hasTranslationKey, noTranslationKeyMessage, setTranslationKey } from "./localization-utils";
 import { translateFiles } from "./index";
 
 /**
@@ -84,6 +84,12 @@ function parseArgs(args: string[]): TranslateArgs {
 export function runTranslate(args: string[]): number {
   const parsed = parseArgs(args);
   if (!!parsed.key) setTranslationKey(parsed.key);
+  // Every locale file needs the key, so a missing one is fatal. Say so now, before we
+  // read anything, rather than on the first request.
+  if (!hasTranslationKey()) {
+    console.error(noTranslationKeyMessage);
+    return 1;
+  }
 
   const product = productPaths[parsed.product];
   let path: string;

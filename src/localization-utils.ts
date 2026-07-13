@@ -42,11 +42,21 @@ export function setTranslationKey(key: string): void {
   translationKey = key || "";
 }
 
+export const noTranslationKeyMessage = "No translator subscription key. Pass it as `survey-utils translate <product> --key <key>`, "
+  + "or set TRANSLATION_API_KEY in the environment or in .env (copy .env.example).";
+
+/**
+ * Whether a key is available, from setTranslationKey or TRANSLATION_API_KEY. Lets a
+ * caller stop before it reads any file, instead of failing on the first request.
+ */
+export function hasTranslationKey(): boolean {
+  return !!(translationKey || process.env.TRANSLATION_API_KEY);
+}
+
 function getTranslationKey(): string {
   const key = translationKey || process.env.TRANSLATION_API_KEY;
   if (!key) {
-    throw new Error("No translator subscription key. Pass it as `survey-utils translate <product> --key <key>`, "
-      + "or set TRANSLATION_API_KEY in the environment or in .env (copy .env.example).");
+    throw new Error(noTranslationKeyMessage);
   }
   return key;
 }
