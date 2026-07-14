@@ -255,13 +255,14 @@ release and a missing one aborts the check with an explanatory message.
 {
   "scripts": {
     // Markdown API docs + the survey JSON Schema. Replaces doc_generator/lib_docgenerator.js.
-    // No entry file and no --path: 'library' plus this package.json is the whole address.
-    "doc_gen": "survey-utils generate-doc library --serializer ./build/survey.core --md --json-definition",
+    // No entry file, no --path, no --serializer and no --out: 'library' plus this package.json is
+    // the whole address, and ./build/survey.core and ./docs follow from it. Build first: the
+    // schema is generated from the bundle.
+    "doc_gen": "survey-utils generate-doc library --md --json-definition",
 
     // The LLM authoring guide, alongside the schema. Both come from the built bundle, and both
-    // are survey-core's, so neither needs the product named. No --out either: this package's
-    // docs folder is where 'library' writes from anywhere.
-    "llm_guide": "survey-utils generate-doc --serializer ./build/survey.core --llm-guide --json-definition",
+    // are survey-core's, so neither needs the product named.
+    "llm_guide": "survey-utils generate-doc --llm-guide --json-definition",
 
     // CI: regenerate in memory, diff against disk, exit 1 when someone changed survey-core
     // and did not regenerate. Output is deterministic, so two runs are byte-identical.
@@ -528,16 +529,24 @@ entries are relative to, so the same name works from the repo root and from the 
 | --- | --- |
 | `--md` | `<ClassName>.md` per class/interface + `index.md`, in `<out>/api` |
 | `--json` | The raw doc model: `classes.json` + `pmes.json` |
-| `--json-definition` | `surveyjs_definition.json` from **`Serializer.generateSchema()`** — needs `--serializer` |
-| `--json-definition=ast` | `surveyjs_definition.json` derived from the **AST** — a different, larger document (see below) |
-| `--llm-guide` | `llm-guide.md`, the authoring guide an LLM is given as context — needs `--serializer`. Also emits `llms.txt` |
+| `--json-definition` | `surveyjs_definition.json` from **`Serializer.generateSchema()`** — needs survey-core **built** |
+| `--json-definition=ast` | `surveyjs_definition.json` derived from the **AST** — a different, larger document (see below), from the sources alone |
+| `--llm-guide` | `llm-guide.md`, the authoring guide an LLM is given as context — needs survey-core **built**. Also emits `llms.txt` |
 
 They are independently selectable: the model is built once and fanned out to whichever emitters
 were asked for. At least one is required — unlike the old generator, there is no implicit default,
 so a run that names none writes nothing and is a mistake, not a no-op: it exits **2** and prints
 the four flags above to choose from, rather than pointing at the usage text.
-`--serializer <path>` names the built product bundle (`./build/survey.core`) whose `Serializer`
-supplies the metadata; it is optional, because survey-creator generates docs without one.
+
+**The bundle.** `--serializer <path>` names the built product bundle whose `Serializer` supplies
+the metadata, and it **defaults to the product's own**: survey-core's `./build/survey.core`, found
+under the root like the entries and the docs folder are. So a built product needs no `--serializer`
+— it is there to name a bundle somewhere *else*. Without one the docs are AST/JSDoc only and every
+serializer-derived section is skipped, which is a legitimate run (survey-creator has no `Serializer`
+of its own and has always generated docs that way) — so a missing bundle only **warns**, naming the
+path it looked at. `--json-definition` (runtime) and `--llm-guide` cannot work without it, and those
+report the bundle they wanted and exit **2** rather than generate half a document.
+
 `--out <dir>` defaults to the docs folder of the package the product is documented from — the
 `Default out` column above — so a run from the repo root and a run from the package itself write
 the same folder; `--check` diffs against disk instead of writing.

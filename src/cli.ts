@@ -3,13 +3,14 @@ import * as ts from "typescript";
 import * as path from "path";
 import {
   buildModel, buildDocModelJSON, buildJSONDefinitionAST, buildMDFiles, buildLLMGuide,
-  buildJSONDefinitionRuntime, loadBundle, setJsonObj, diffFiles, writeFiles, resolveDir, FileMap
+  buildJSONDefinitionRuntime, loadBundle, findBundle, SurveyBundle, setJsonObj, diffFiles,
+  writeFiles, resolveDir, FileMap
 } from "./doc-gen";
 import { runCheckUnusedStrings } from "./checkUnusedStrings";
 import { products } from "./loc-lint";
 import { PathError, requireEntryFile } from "./paths";
 import {
-  docEntries, docOut, docProductNames, docProducts, docRoot, SERIALIZER_PRODUCT
+  docBundle, docEntries, docOut, docProductNames, docProducts, docRoot, SERIALIZER_PRODUCT
 } from "./doc-products";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 
@@ -22,10 +23,11 @@ const EMITTERS = `  --md                      Markdown API docs: <ClassName>.md 
   --json                    The raw doc model: classes.json + pmes.json.
   --json-definition[=runtime|ast]
                             JSON Schema. 'runtime' (default) is Serializer.generateSchema() and
-                            requires --serializer; 'ast' is the doc-generator's AST-derived
-                            document of the same name -- a different, larger schema.
+                            needs survey-core built; 'ast' is the doc-generator's AST-derived
+                            document of the same name -- a different, larger schema, from the
+                            sources alone.
   --llm-guide               llm-guide.md: the authoring guide an LLM is given as context so the
-                            SurveyJS JSON it writes loads. Needs --serializer. Also emits
+                            SurveyJS JSON it writes loads. Needs survey-core built. Also emits
                             llms.txt, listing the guide and the schema.`;
 
 const USAGE = `survey-utils <command> [options]
@@ -60,9 +62,13 @@ survey-utils generate-doc [product] [options]
                             escape hatch for a layout the table does not know: a fork, another
                             chunk, another package.
 
-  --serializer <path>       Module to require for Serializer metadata (e.g. ./build/survey.core).
-                            Optional: without it the docs are AST/JSDoc only, and every
-                            serializer-derived section is skipped.
+  --serializer <path>       Module to require for Serializer metadata. Default: the product's own
+                            built bundle -- survey-core's ./build/survey.core, found under --path
+                            like everything else -- so a built product needs no --serializer, and
+                            this only names one somewhere else. survey-creator has no bundle: its
+                            docs are AST/JSDoc only, and every serializer-derived section is
+                            skipped. --json-definition and --llm-guide cannot be: both report the
+                            bundle they wanted rather than generate half of one.
 
   Emitters -- independently selectable, at least one required:
 ${EMITTERS}
@@ -244,22 +250,64 @@ function parseDocArgs(args: string[]): DocArgs {
       + `Generate them on their own (no product), and document ${named} in a separate run.`
     );
   }
-  if (res.jsonDefinition === "runtime" && !res.serializer) {
-    throw new UsageError(
-      "--json-definition needs --serializer: the schema comes from Serializer.generateSchema() in the "
-      + "built bundle. Use --json-definition=ast for the AST-derived document, which needs no bundle."
-    );
-  }
-  if (res.llmGuide && !res.serializer) {
-    throw new UsageError(
-      "--llm-guide needs --serializer: the question types, properties, operators and examples all "
-      + "come from the built bundle, e.g. --serializer ./build/survey.core"
-    );
-  }
   if ((res.split || res.withMemberLinks) && !res.llmGuide) {
     throw new UsageError("--split and --with-member-links only apply to --llm-guide.");
   }
   return res;
+}
+
+/**
+ * The bundle the Serializer metadata comes from: --serializer when the caller named one, and the
+ * product's own built bundle when it did not -- the docs are generated from a root, and survey-core's
+ * bundle sits at a known place under it, so there is nothing for the caller to work out.
+ *
+ * Null when there is no bundle to load, which stays a legitimate run: without one the docs are
+ * AST/JSDoc only, and survey-creator has always generated them that way. The two emitters that
+ * cannot work without it say so instead, and say where they looked.
+ */
+function loadDocBundle(args: DocArgs, root: string): SurveyBundle | null {
+  const needed = [args.jsonDefinition === "runtime" ? "--json-definition" : "", args.llmGuide ? "--llm-guide" : ""]
+    .filter((flag) => !!flag).join(" and ");
+  const named = !!args.serializer;
+  const bundle = named ? <string>args.serializer : docBundle(args.product, root);
+
+  const found = !!bundle ? findBundle(bundle, root) : undefined;
+  if (!!found) return loadBundle(found, root);
+
+  // A --serializer that resolves to nothing is a typo or a missing build either way, so it is
+  // reported before the emitters are, whether or not this run needed the bundle at all.
+  if (named) {
+    throw new UsageError(
+      `--serializer: no module at ${path.resolve(root, <string>args.serializer)}\n`
+      + "It names the built product bundle, e.g. --serializer ./build/survey.core -- so the product "
+      + "has to be built first. Leave it out to use the product's own bundle.",
+      true
+    );
+  }
+  if (!needed) {
+    // The bundle only enriches --md and --json, so a missing one is a smaller doc, not a failure --
+    // but a silently smaller one would look like the generator dropping half the metadata.
+    if (!!bundle) {
+      console.warn(
+        `warning: no bundle at ${path.resolve(root, bundle)} -- the docs will be AST/JSDoc only, `
+        + "without the serializer-derived sections. Build the product, or pass --serializer <path>."
+      );
+    }
+    return null;
+  }
+  throw new UsageError(
+    `${needed} ${needed.indexOf("and") > 0 ? "need" : "needs"} the built bundle: the schema comes from `
+    + "Serializer.generateSchema(), and the guide's question types, properties, operators and examples "
+    + "all come from the same bundle.\n"
+    + (!!bundle
+      ? `Nothing is built at ${path.resolve(root, bundle)}: build ${docProducts[args.product].repo}, `
+        + "or pass --serializer <path> to name another bundle."
+      : `There is no bundle to default to under ${root}: pass --serializer <path>.`)
+    + (args.jsonDefinition === "runtime"
+      ? "\nUse --json-definition=ast for the AST-derived document, which needs no bundle."
+      : ""),
+    true
+  );
 }
 
 function generateDoc(args: DocArgs): number {
@@ -282,7 +330,7 @@ function generateDoc(args: DocArgs): number {
   const out = at(!!args.out ? args.out : docOut(args.product, root));
   const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api");
 
-  const bundle = !!args.serializer ? loadBundle(args.serializer, root) : null;
+  const bundle = loadDocBundle(args, root);
   const serializer = bundle ? bundle.Serializer : null;
   const files: FileMap = {};
   // The front matter and the documentation URLs want the product's public name, not its key --

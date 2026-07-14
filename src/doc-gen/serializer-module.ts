@@ -55,6 +55,22 @@ export function loadBundle(modulePath: string, base?: string): SurveyBundle {
 }
 
 /**
+ * The file `modulePath` names, or undefined when there is none.
+ *
+ * The bundle is optional, and a default one is only used when it has been built -- so whether it
+ * is there has to be answerable without require()ing it, which would run the whole bundle.
+ * require.resolve does the extension search (./build/survey.core -> survey.core.js) that a plain
+ * existsSync would miss.
+ */
+export function findBundle(modulePath: string, base?: string): string | undefined {
+  try {
+    return require.resolve(resolveModule(modulePath, base));
+  } catch (error) {
+    return undefined;
+  }
+}
+
+/**
  * Paths resolve against `base` -- the repo root `--path` named, or the working
  * directory; bare names resolve as node modules of it.
  */

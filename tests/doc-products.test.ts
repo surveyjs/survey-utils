@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import {
-  docEntries, docOut, docProductNames, docProducts, docRoot, packageName
+  docBundle, docEntries, docOut, docProductNames, docProducts, docRoot, packageName
 } from "../src/doc-products";
 import { EntryFileError, ProductRootError, surveyUtilsRoot } from "../src/paths";
 
@@ -91,6 +91,21 @@ test("a product whose repo is the package writes ./docs, and so does a root no l
     .toEqual("docs");
   // --entry documenting a fork: no layout matches, so there is no docs folder to take from one.
   expect(docOut("library", fakeRoot("survey-fork", ["src/index.ts"]))).toEqual("docs");
+});
+
+test("without --serializer the bundle is survey-core's own, under whichever root documented it", () => {
+  expect(docBundle("library", fakeRoot("survey-library", ["packages/survey-core/entries/chunks/model.ts"])))
+    .toEqual("./packages/survey-core/build/survey.core");
+  expect(docBundle("library", fakeRoot("survey-core", ["entries/chunks/model.ts"])))
+    .toEqual("./build/survey.core");
+});
+
+test("a product with no bundle of its own defaults to none: survey-creator has no Serializer", () => {
+  expect(docBundle("creator", fakeRoot("survey-creator-core", ["src/entries/index.ts"]))).toBeUndefined();
+  expect(docBundle("analytics", fakeRoot("survey-analytics", ["src/index.ts"]))).toBeUndefined();
+  expect(docBundle("pdf", fakeRoot("survey-pdf", ["src/entries/pdf.ts", "src/entries/forms.ts"])))
+    .toBeUndefined();
+  expect(docBundle("library", fakeRoot("survey-fork", ["src/index.ts"]))).toBeUndefined();
 });
 
 test("every product carries the front-matter name the Markdown emitter writes", () => {

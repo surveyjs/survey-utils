@@ -12,7 +12,7 @@ export {
   demoLinks, summary
 } from "./doc-utils";
 export {
-  loadSerializer, loadBundle, buildJSONDefinitionRuntime, SurveyBundle
+  loadSerializer, loadBundle, findBundle, buildJSONDefinitionRuntime, SurveyBundle
 } from "./serializer-module";
 export {
   buildFacts, SurveyFacts, ClassFact, ClassKind, PropertyFact

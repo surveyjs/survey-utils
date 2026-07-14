@@ -30,6 +30,13 @@ interface DocLayout {
    * it, and a package-root layout is already there. Default: DEFAULT_DOCS.
    */
   docs?: string;
+  /**
+   * The built bundle --serializer names when the caller does not, relative to that root. Only
+   * survey-core has one: the schema and the guide are generated from its Serializer, and
+   * survey-creator has none of its own -- which is why this is a layout's to declare, not a
+   * default every product would silently inherit.
+   */
+  bundle?: string;
 }
 
 export interface DocProduct {
@@ -56,9 +63,14 @@ export const docProducts: { [key: string]: DocProduct } = {
       {
         pkg: "survey-library",
         entries: ["packages/survey-core/entries/chunks/model.ts"],
-        docs: "packages/survey-core/docs"
+        docs: "packages/survey-core/docs",
+        bundle: "./packages/survey-core/build/survey.core"
       },
-      { pkg: "survey-core", entries: ["entries/chunks/model.ts"] }
+      {
+        pkg: "survey-core",
+        entries: ["entries/chunks/model.ts"],
+        bundle: "./build/survey.core"
+      }
     ]
   },
   creator: {
@@ -153,4 +165,14 @@ export function docEntries(key: string, root: string): string[] {
 export function docOut(key: string, root: string): string {
   const layout = layoutAt(docProducts[key], root);
   return !!layout && !!layout.docs ? layout.docs : DEFAULT_DOCS;
+}
+
+/**
+ * The built bundle the run reads its Serializer from without --serializer, relative to `root`:
+ * survey-core's, the one product that has one. Undefined for the rest -- survey-creator generates
+ * its docs without a bundle at all, so there is nothing to point at and nothing to demand.
+ */
+export function docBundle(key: string, root: string): string | undefined {
+  const layout = layoutAt(docProducts[key], root);
+  return !!layout ? layout.bundle : undefined;
 }
