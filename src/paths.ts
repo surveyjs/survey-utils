@@ -35,8 +35,18 @@ export function resolvePath(target: string): string {
   return path.isAbsolute(target) ? target : path.resolve(process.cwd(), target);
 }
 
-/** A directory the caller pointed `--path` at is not there. The message is the whole report. */
-export class ProductRootError extends Error { }
+/**
+ * A path the caller named is not on disk. The message is the whole report: the caller
+ * typed a folder or a file that is not there, so there is nothing to print but where we
+ * looked -- no stack, and no usage text the mistake has nothing to do with.
+ */
+export class PathError extends Error { }
+
+/** A directory the caller pointed `--path` at is not there. */
+export class ProductRootError extends PathError { }
+
+/** An entry file the caller named is not there, once resolved against the repo root. */
+export class EntryFileError extends PathError { }
 
 /**
  * The repo root a command works against: `--path <dir>` when the caller named one,
@@ -66,4 +76,27 @@ export function requireDir(dir: string): string {
     );
   }
   return resolved;
+}
+
+/**
+ * An entry file, resolved against the repo root `--path` named, or against the working
+ * directory when it named none.
+ *
+ * Checked here rather than inside the TypeScript program, so a mistyped entry is reported
+ * before the serializer bundle is loaded -- otherwise a run that gets both wrong blames the
+ * bundle. The root and the entry are printed apart from each other because either one can be
+ * the mistake, and the joined path alone does not say which.
+ */
+export function requireEntryFile(entry: string, root?: string): string {
+  const resolved = !root ? resolvePath(entry) : path.resolve(root, entry);
+  if (fs.existsSync(resolved)) return resolved;
+  throw new EntryFileError(
+    `Entry file not found: ${resolved}\n` +
+    (!!root
+      ? `  --path: ${root}\n  entry:  ${entry}\n` +
+        "An entry is resolved against --path, so name it relative to the repo root."
+      : `  entry: ${entry}\n` +
+        `Without --path an entry is resolved against the working directory (${process.cwd()}).\n` +
+        "Name it relative to that, or point --path at the repo root it belongs to.")
+  );
 }

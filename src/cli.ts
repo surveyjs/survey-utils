@@ -7,7 +7,7 @@ import {
 } from "./doc-gen";
 import { runCheckUnusedStrings } from "./checkUnusedStrings";
 import { products } from "./loc-lint";
-import { ProductRootError, requireDir } from "./paths";
+import { PathError, requireDir, requireEntryFile } from "./paths";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 
 const USAGE = `survey-utils <command> [options]
@@ -190,7 +190,10 @@ function generateDoc(args: DocArgs): number {
   const root = !!args.path ? requireDir(args.path) : undefined;
   const at = (target: string): string => (!root ? target : path.resolve(root, target));
 
-  const entries = args.entries.map(at);
+  // Before the bundle: an entry that is not there is the caller's mistake, and it is the one
+  // the report should name. Checked for every emitter, including the ones that never build the
+  // model, so an entry is never quietly ignored.
+  const entries = args.entries.map((entry) => requireEntryFile(entry, root));
   const out = at(args.out);
   const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api");
 
@@ -272,9 +275,9 @@ function main(): void {
     }
     throw new UsageError("Unknown command: " + command);
   } catch (error) {
-    // A --path that is not there is the caller's mistake, and the message names the
-    // folder: report it like a usage error, without the usage text or a stack.
-    if (error instanceof ProductRootError) {
+    // A path that is not there -- a --path, an entry file -- is the caller's mistake, and the
+    // message names it: report it like a usage error, without the usage text or a stack.
+    if (error instanceof PathError) {
       console.error(error.message);
       process.exit(2);
     }

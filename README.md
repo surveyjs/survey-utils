@@ -88,6 +88,22 @@ A `--path` is one repo, so it cannot answer for a run over several products: `ch
 --path <dir>` with no product named is rejected, and `translate` requires the product too. A
 `--path` that is not there fails with the folder it looked in, before anything is read or written.
 
+A path the caller typed and got wrong is reported as a usage mistake — **exit code 2**, the folder
+or file it looked for, and no stack trace. `generate-doc` checks its entry files the same way it
+checks `--path`, and before it loads the `--serializer` bundle, so a run that gets both wrong
+blames the entry rather than the bundle. Because the entry and the root are each half of the
+answer, the report keeps them apart:
+
+```
+Entry file not found: c:\survey.js\LibV3\survey-library\src\entries\chunks\model.ts
+  --path: c:\survey.js\LibV3\survey-library
+  entry:  src/entries/chunks/model.ts
+An entry is resolved against --path, so name it relative to the repo root.
+```
+
+Entries are checked for every emitter, including `--json-definition` (runtime), which never builds
+the doc model — an entry that is not there is never quietly ignored.
+
 ## 🔨 Build and test
 
 ```bash
@@ -462,6 +478,12 @@ were asked for. At least one is required — unlike the old generator, there is 
 `--serializer <path>` names the built product bundle (`./build/survey.core`) whose `Serializer`
 supplies the metadata; it is optional, because survey-creator generates docs without one.
 `--out <dir>` defaults to `./docs`, `--check` diffs against disk instead of writing.
+
+`<entry...>` stays an argument rather than something `--path` implies, because it is the one thing
+the repo root cannot tell you: survey-core's entry is `entries/chunks/model.ts` and survey-creator's
+is `src/entries/index.ts` — different folders, and a run may name several. What `--path` does is
+say what those relative paths are relative to. Both are checked up front: see
+[`--path`](#-path-dir--where-the-repo-is) above for what a wrong one prints.
 
 ### The schema and the guide
 
