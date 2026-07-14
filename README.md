@@ -8,16 +8,23 @@ Three commands, each solving a problem that used to be a per-repo script:
 | --- | --- |
 | `translate <product>` | Sends every not-yet-translated string in a product's locale files to the Azure Translator API and writes the result back, keeping the files' comments and structure. |
 | `check-strings [product]` | Reports localization strings that no product source reaches any more, and exits `1` so CI fails when a newly added string is never used. |
-| `generate-doc <entry...>` | Generates the API docs, the survey JSON Schema and the LLM authoring guide from a product's TypeScript sources and built bundle. |
+| `generate-doc [product]` | Generates the API docs, the survey JSON Schema and the LLM authoring guide from a product's TypeScript sources and built bundle. |
 
 ```bash
 survey-utils help      # the full option list
 ```
 
-Products it knows: **`library`** (survey-core), **`creator`** (survey-creator-core),
-**`creator-presets`** (the creator's UI presets), **`analytics`** (survey-analytics, also
-accepted as `dashboard`). Each is described in full under
-[Using it from a product's package.json](#-using-it-from-a-products-packagejson).
+**All three take a product and find its folders themselves.** Nothing about a repo's layout is
+typed at the command line: `translate` knows where a product keeps its locale files,
+`check-strings` knows its source roots, and `generate-doc` knows the entry files its docs are
+built from — survey-core is documented from `entries/chunks/model.ts`, survey-pdf from
+`pdf.ts` and `forms.ts` together. Name the product; `--path` says where the repo is, and only if
+it is not where the command would look.
+
+Products: **`library`** (survey-core), **`creator`** (survey-creator-core), **`analytics`**
+(survey-analytics, also accepted as `dashboard`), **`pdf`** (survey-pdf, docs only), and
+**`creator-presets`** (the creator's UI presets, `translate` only). Each is described in full
+under [Using it from a product's package.json](#-using-it-from-a-products-packagejson).
 
 ## 📁 Structure
 
@@ -27,6 +34,7 @@ survey-utils/
 │   ├── cli.ts                  # The `survey-utils` bin: translate, check-strings, generate-doc
 │   ├── index.ts                # Package exports (see "The package exports" below)
 │   ├── paths.ts                # What --path means: the repo root, for every command
+│   ├── doc-products.ts         # generate-doc: product -> repo, entry files, front-matter name
 │   ├── translate.ts            # translate: product -> localization folder, --key, --path
 │   ├── translateLibrary.ts     # Per-product entry points, kept for the run_translate_*.cmd
 │   ├── translateCreator.ts     #   files; the CLI is the supported route
@@ -50,6 +58,8 @@ survey-utils/
 ├── tests/
 │   ├── translation_utils.test.ts
 │   ├── loc-lint.test.ts
+│   ├── paths.test.ts           # --path and entry resolution
+│   ├── doc-products.test.ts    # product -> repo + entries, and the roots it refuses
 │   └── doc-gen/                # Doc-generator specs + fixtures
 ├── allowlists/                 # Known-dynamic and known-dead strings, one file per product
 ├── run_*.cmd                   # Windows shortcuts for the checkout-local runs
@@ -68,41 +78,49 @@ that root, so nothing else about the layout has to be typed:
 ```bash
 survey-utils check-strings library --path ../../LibV3/survey-library
 survey-utils translate     library --path ../../LibV3/survey-library
-survey-utils generate-doc  packages/survey-core/entries/chunks/model.ts --md \
-                                   --path ../../LibV3/survey-library
+survey-utils generate-doc  library --md --path ../../LibV3/survey-library
 ```
 
 | Command | What it joins onto the root |
 | --- | --- |
 | `check-strings` | The locale file, the source roots and the built bundle (`packages/survey-core/…`). Only `allowlists/<product>.json` stays in survey-utils. |
 | `translate` | The product's localization folder (`library` → `packages/survey-core/src/localization`). |
-| `generate-doc` | Every relative path the caller passed: `<entry...>`, `--serializer`, `--out`, `--md-out`. |
+| `generate-doc` | The product's entry files (`library` → `packages/survey-core/entries/chunks/model.ts`), and every relative path the caller passed: `--serializer`, `--out`, `--md-out`. |
 
 Without `--path`, `translate` and `check-strings` expect the SurveyJS repos to sit **side by
-side** — the folder that holds `survey-utils` also holds `survey-library`, `survey-creator` and
-`survey-analytics`. That is how they find a product without being told where it is. `generate-doc`
-falls back to the working directory instead, which is what a product's own `package.json` script
-wants.
+side** — the folder that holds `survey-utils` also holds `survey-library`, `survey-creator`,
+`survey-analytics` and `survey-pdf`. That is how they find a product without being told where it
+is. `generate-doc` looks at the **working directory first** and falls back to the same sibling
+lookup: a product's own `package.json` script runs inside the package it documents, and a run from
+this checkout does not.
+
+`--path` may name either the **repo root** (`../survey-library`) or the **package inside it** that
+holds the entry (`../survey-library/packages/survey-core`) — both are things a caller has in hand,
+and the entry files are known for each. Which one it is, is not guessed from the folder name: the
+`name` in the `package.json` at that root has to be the product's. A root that holds the wrong
+package is a mistake, and saying so is the whole point — a bare `src/index.ts` is survey-analytics'
+entry *and* survey-utils' own file, so a check that matched on the entry path alone would cheerfully
+document the wrong repo.
 
 A `--path` is one repo, so it cannot answer for a run over several products: `check-strings
---path <dir>` with no product named is rejected, and `translate` requires the product too. A
-`--path` that is not there fails with the folder it looked in, before anything is read or written.
+--path <dir>` with no product named is rejected, and `translate` requires the product too.
 
-A path the caller typed and got wrong is reported as a usage mistake — **exit code 2**, the folder
-or file it looked for, and no stack trace. `generate-doc` checks its entry files the same way it
-checks `--path`, and before it loads the `--serializer` bundle, so a run that gets both wrong
-blames the entry rather than the bundle. Because the entry and the root are each half of the
-answer, the report keeps them apart:
+A path the caller typed and got wrong is reported as a usage mistake — **exit code 2**, no stack
+trace, and the report says what it found against what it wanted:
 
 ```
-Entry file not found: c:\survey.js\LibV3\survey-library\src\entries\chunks\model.ts
-  --path: c:\survey.js\LibV3\survey-library
-  entry:  src/entries/chunks/model.ts
-An entry is resolved against --path, so name it relative to the repo root.
+library: C:\survey.js\Lib\survey-pdf is not where it is documented from.
+  package.json there: survey-pdf
+  expected:
+    survey-library -- packages/survey-core/entries/chunks/model.ts
+    survey-core -- entries/chunks/model.ts
+--path must name the root of survey-library, or the package inside it that holds the entry.
 ```
 
-Entries are checked for every emitter, including `--json-definition` (runtime), which never builds
-the doc model — an entry that is not there is never quietly ignored.
+The entries are resolved and checked **before** the `--serializer` bundle is loaded, so a run that
+gets both wrong blames the entry rather than the bundle, and for every emitter — including
+`--json-definition` (runtime), which never builds the doc model — so a root that is not there is
+never quietly ignored.
 
 ## 🔨 Build and test
 
@@ -117,7 +135,7 @@ npm test           # jest + ts-jest, over tests/
 ```bash
 node ./dist/cli.js translate library
 node ./dist/cli.js check-strings creator --list-dead
-node ./dist/cli.js generate-doc ./entries/chunks/model.ts --md
+node ./dist/cli.js generate-doc library --md
 ```
 
 The `npm run translate`, `npm run check:unused-strings` and `npm run generate-doc` scripts are
@@ -218,8 +236,8 @@ so the bare `survey-utils` name resolves. Every path a command takes is resolved
 An installed dependency has no sibling checkouts, so `translate` and `check-strings` cannot find
 the product by looking next to themselves: both need **`--path`**, and from a package inside a
 monorepo it is the repo root above it — `--path ../..` from `packages/survey-core`. `generate-doc`
-needs none: without `--path` its paths resolve against the working directory, which is exactly the
-package the script runs in.
+needs none: the working directory *is* the package it documents, its `package.json` names the
+product, and the entry files follow from that.
 
 Nothing has been cut over yet — no product depends on `survey-utils`, and
 [surveyjs-doc-generator](https://github.com/surveyjs/surveyjs-doc-generator) still ships to every
@@ -237,10 +255,12 @@ release and a missing one aborts the check with an explanatory message.
 {
   "scripts": {
     // Markdown API docs + the survey JSON Schema. Replaces doc_generator/lib_docgenerator.js.
-    "doc_gen": "survey-utils generate-doc ./entries/chunks/model.ts --serializer ./build/survey.core --md --json-definition",
+    // No entry file and no --path: 'library' plus this package.json is the whole address.
+    "doc_gen": "survey-utils generate-doc library --serializer ./build/survey.core --md --json-definition",
 
-    // The LLM authoring guide, alongside the schema. Both come from the built bundle.
-    "llm_guide": "survey-utils generate-doc ./entries/chunks/model.ts --serializer ./build/survey.core --llm-guide --json-definition --out ./docs",
+    // The LLM authoring guide, alongside the schema. Both come from the built bundle, and both
+    // are survey-core's, so neither needs the product named.
+    "llm_guide": "survey-utils generate-doc --serializer ./build/survey.core --llm-guide --json-definition --out ./docs",
 
     // CI: regenerate in memory, diff against disk, exit 1 when someone changed survey-core
     // and did not regenerate. Output is deterministic, so two runs are byte-identical.
@@ -273,7 +293,7 @@ because it reads the property grid, question types and logic types from the bund
   "scripts": {
     // No --serializer -> no --json-definition, no --llm-guide. Replaces
     // doc_generator/editor_docgenerator.js.
-    "doc_gen": "survey-utils generate-doc src/entries/index.ts --md",
+    "doc_gen": "survey-utils generate-doc creator --md",
     "doc_gen:check": "npm run doc_gen -- --check",
 
     "translate": "survey-utils translate creator --path ../..",
@@ -301,11 +321,11 @@ From the checkout: `node ./dist/cli.js translate creator-presets`.
 
 ### `analytics` — survey-analytics (the Dashboard)
 
-Localization only. Its string check is the one that needs **no build**: the chart types live
-behind Plotly, which will not import under Node, so its resolver is static (see
-[products/analytics.ts](src/loc-lint/products/analytics.ts)). `analytics` also answers to
-**`dashboard`**, the name it was registered under first — both spellings select the same product,
-and an alias never makes it run twice in a whole-repo check.
+Localization, and docs from `src/index.ts` — no bundle, so no schema and no guide. Its string check
+is the one that needs **no build**: the chart types live behind Plotly, which will not import under
+Node, so its resolver is static (see [products/analytics.ts](src/loc-lint/products/analytics.ts)).
+`analytics` also answers to **`dashboard`**, the name it was registered under first — both spellings
+select the same product, and an alias never makes it run twice in a whole-repo check.
 
 Its package *is* its repo root, so `--path .` is what the scripts pass.
 
@@ -313,8 +333,30 @@ Its package *is* its repo root, so `--path .` is what the scripts pass.
 // survey-analytics/package.json
 {
   "scripts": {
+    // Replaces doc_generator/lib_docgenerator.js src/index.ts.
+    "doc:gen": "survey-utils generate-doc analytics --md",
+
     "translate": "survey-utils translate analytics --path .",
     "check:unused-strings": "survey-utils check-strings analytics --path ."
+  }
+}
+```
+
+### `pdf` — survey-pdf (the PDF Generator)
+
+**Docs only**, and the one product documented from **two entries at once** — `src/entries/pdf.ts`
+and `src/entries/forms.ts`, exactly as its own `doc_gen` script always passed them. Naming the
+product keeps that pair together; it is the sort of detail a caller should not have to remember,
+and the reason the entries live in a table rather than in each repo's scripts. Its package is its
+repo root, and it has no localization, so it is not a `translate` or `check-strings` product.
+
+```jsonc
+// survey-pdf/package.json
+{
+  "scripts": {
+    // Replaces doc_generator/lib_docgenerator.js src/entries/pdf.ts src/entries/forms.ts.
+    "doc_gen": "survey-utils generate-doc pdf --md",
+    "doc_gen:check": "npm run doc_gen -- --check"
   }
 }
 ```
@@ -462,8 +504,21 @@ TypeScript 5.7 and exposed through the CLI, so a consumer needs one build-time t
 instead of two.
 
 ```bash
-survey-utils generate-doc <entry...> [options]
+survey-utils generate-doc [product] [options]
 ```
+
+| Product | Documented from | Front matter |
+| --- | --- | --- |
+| `library` | `packages/survey-core/entries/chunks/model.ts` | Form Library |
+| `creator` | `packages/survey-creator-core/src/entries/index.ts` | Survey Creator |
+| `analytics` | `src/index.ts` | Dashboard |
+| `pdf` | `src/entries/pdf.ts` **and** `src/entries/forms.ts` | PDF Generator |
+
+The entry files are a fact of each repo's layout, not a decision the caller makes — so the product
+is all that is named, and the table above (in [doc-products.ts](src/doc-products.ts)) supplies the
+rest: which repo to look in, which entries to compile, and the product name written into the
+Markdown front matter and the documentation URLs. Each product is also listed with the package the
+entries are relative to, so the same name works from the repo root and from the package inside it.
 
 | Emitter | Produces |
 | --- | --- |
@@ -481,11 +536,23 @@ the four flags above to choose from, rather than pointing at the usage text.
 supplies the metadata; it is optional, because survey-creator generates docs without one.
 `--out <dir>` defaults to `./docs`, `--check` diffs against disk instead of writing.
 
-`<entry...>` stays an argument rather than something `--path` implies, because it is the one thing
-the repo root cannot tell you: survey-core's entry is `entries/chunks/model.ts` and survey-creator's
-is `src/entries/index.ts` — different folders, and a run may name several. What `--path` does is
-say what those relative paths are relative to. Both are checked up front: see
-[`--path`](#-path-dir--where-the-repo-is) above for what a wrong one prints.
+**Which emitters need the product.** `--md` and `--json` document one product's API, so the run has
+to say which — omit it and the command exits `2` listing the four. `--json-definition` and
+`--llm-guide` need **no** product: the schema is `Serializer.generateSchema()` and the guide is
+built from the question types, so both are survey-core's whatever else is generated, and the
+product is always `library`. Asking for either of them *for another product* is rejected rather
+than quietly ignored:
+
+```
+survey-utils generate-doc creator --md --llm-guide --serializer ...
+--llm-guide cannot be generated for 'creator': the schema and the guide both come from
+survey-core, so they only apply to 'library'.
+```
+
+**`--entry <path>`** is the escape hatch, repeatable: it documents an entry the table does not
+cover — a fork, another chunk, another package — instead of the product's own. Nothing in the
+SurveyJS repos needs it; it exists so that an unusual layout is not a reason to go back to the old
+generator.
 
 ### The schema and the guide
 

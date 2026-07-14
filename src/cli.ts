@@ -7,7 +7,10 @@ import {
 } from "./doc-gen";
 import { runCheckUnusedStrings } from "./checkUnusedStrings";
 import { products } from "./loc-lint";
-import { PathError, requireDir, requireEntryFile } from "./paths";
+import { PathError, requireEntryFile } from "./paths";
+import {
+  docEntries, docProductNames, docProducts, docRoot, SERIALIZER_PRODUCT
+} from "./doc-products";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 
 /**
@@ -28,26 +31,34 @@ const EMITTERS = `  --md                      Markdown API docs: <ClassName>.md 
 const USAGE = `survey-utils <command> [options]
 
 Commands:
-  generate-doc <entry...>   Generate API documentation from TypeScript entry files.
+  generate-doc [product]    Generate API documentation from a product's TypeScript sources.
   check-strings [product]   Report localization strings no product source reaches any more.
   translate <product>       Translate the localization files of a product.
 
---path <dir> means the same thing in all three: the root of the product's repo -- the
-folder that holds its package.json, not a folder inside it. Each command joins its own
-subfolders onto it. Without --path, generate-doc works from the working directory, and
-check-strings and translate look the repo up next to survey-utils (a local SurveyJS
-checkout, where survey-utils sits beside survey-library, survey-creator, survey-analytics).
+All three take a product and find its folders themselves. --path <dir> means the same thing
+in all three: the root of the product's repo -- the folder that holds its package.json, not a
+folder inside it. Without --path they look the repo up next to survey-utils (a local SurveyJS
+checkout, where survey-utils sits beside survey-library, survey-creator, survey-analytics),
+except that generate-doc uses the working directory first, so a product calling the bin from
+its own package.json needs no --path.
 
-survey-utils generate-doc <entry...> [options]
+survey-utils generate-doc [product] [options]
 
-  <entry...>                One or more TS entry files, relative to --path, or to the working
-                            directory without it (survey-core: ./entries/chunks/model.ts,
-                            creator: src/entries/index.ts).
+  [product]                 ${docProductNames.join(" | ")}. The entry files follow from it --
+                            survey-core is documented from entries/chunks/model.ts, survey-pdf
+                            from pdf.ts and forms.ts together -- so there is no entry to type.
+                            Required by --md and --json: they document one product.
+                            Not needed by --json-definition and --llm-guide: both come from
+                            survey-core, so the product is always 'library'.
 
-  --path <dir>              Repo root every relative path below is resolved against:
-                            <entry...>, --serializer, --out and --md-out. Default: the
-                            working directory, so a product calling the bin from its own
-                            package.json needs no --path.
+  --path <dir>              Root of the product's repo, or of the package inside it that holds
+                            the entry. The entry files, --serializer, --out and --md-out are all
+                            resolved against it. Default: the working directory when the
+                            product's entries are under it, the sibling checkout otherwise.
+
+  --entry <path>            Document this entry instead of the product's own. Repeatable. The
+                            escape hatch for a layout the table does not know: a fork, another
+                            chunk, another package.
 
   --serializer <path>       Module to require for Serializer metadata (e.g. ./build/survey.core).
                             Optional: without it the docs are AST/JSDoc only, and every
@@ -57,7 +68,6 @@ survey-utils generate-doc <entry...> [options]
 ${EMITTERS}
 
   Markdown options:
-  --product <name>          Front-matter product. Default: detected from the entry path.
   --md-out <dir>            Default: <out>/api
   --source-base-url <url>   Default: https://surveyjs.io
 
@@ -90,8 +100,11 @@ survey-utils translate <product> [--key <key>] [--path <dir>]
 `;
 
 interface DocArgs {
+  /** The product documented: its entries, its repo and its front-matter name all follow. */
+  product: string;
+  /** --entry: the entries the caller named instead of the product's own. Normally empty. */
   entries: string[];
-  /** Repo root the relative paths below resolve against. Default: the working directory. */
+  /** Repo root the relative paths below resolve against. Default: see docRoot(). */
   path?: string;
   serializer?: string;
   md: boolean;
@@ -101,7 +114,6 @@ interface DocArgs {
   maxBytes?: number;
   split: boolean;
   withMemberLinks: boolean;
-  product?: string;
   mdOut?: string;
   sourceBaseUrl?: string;
   out: string;
@@ -118,11 +130,17 @@ class UsageError extends Error {
   }
 }
 
+/** The products a run may name, listed the way the errors below list them. */
+const PRODUCT_LIST = docProductNames.join(" | ");
+
 function parseDocArgs(args: string[]): DocArgs {
+  // 'library' is the default the emitters that have no product of their own fall back to; a run
+  // that needs a product to be named is rejected below before this stands in for one.
   const res: DocArgs = {
-    entries: [], md: false, json: false, llmGuide: false, split: false,
-    withMemberLinks: false, out: "docs", check: false
+    product: SERIALIZER_PRODUCT, entries: [], md: false, json: false, llmGuide: false,
+    split: false, withMemberLinks: false, out: "docs", check: false
   };
+  let named: string | undefined = undefined;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     const value = (): string => {
@@ -131,7 +149,27 @@ function parseDocArgs(args: string[]): DocArgs {
       return next;
     };
     if (arg.indexOf("--") !== 0) {
-      res.entries.push(arg);
+      if (!!named) {
+        throw new UsageError(
+          `One product at a time: '${named}' and then '${arg}'.\n`
+          + "The entry files follow from the product, so there is no entry to pass either -- "
+          + "use --entry <path> to document something the product's layout does not cover."
+        );
+      }
+      if (!docProducts[arg]) {
+        throw new UsageError(
+          `Unknown product: '${arg}'. Pass one of: ${PRODUCT_LIST}.\n`
+          + (/[\\/.]/.test(arg)
+            ? "That looks like an entry file: generate-doc takes the product now and finds its "
+              + "entries itself. Pass --entry " + arg + " to document it anyway."
+            : ""),
+          true
+        );
+      }
+      named = arg;
+      res.product = arg;
+    } else if (arg === "--entry") {
+      res.entries.push(value());
     } else if (arg === "--md") {
       res.md = true;
     } else if (arg === "--json") {
@@ -158,8 +196,6 @@ function parseDocArgs(args: string[]): DocArgs {
       res.path = value();
     } else if (arg === "--serializer") {
       res.serializer = value();
-    } else if (arg === "--product") {
-      res.product = value();
     } else if (arg === "--md-out") {
       res.mdOut = value();
     } else if (arg === "--source-base-url") {
@@ -172,17 +208,35 @@ function parseDocArgs(args: string[]): DocArgs {
       throw new UsageError("Unknown option: " + arg);
     }
   }
-  if (res.entries.length === 0) {
-    throw new UsageError("No entry file. Example: survey-utils generate-doc ./entries/chunks/model.ts --md");
-  }
   if (!res.md && !res.json && !res.jsonDefinition && !res.llmGuide) {
     // Deliberately not inheriting doc-generator's implicit markdown-or-JSON default: a run
     // that names no emitter writes nothing, so it is a mistake, not a default. The flags are
     // the whole answer to it, so report them here instead of pointing at the usage text.
     throw new UsageError(
       "No emitter selected: generate-doc writes nothing on its own. Pass at least one of:\n\n"
-      + EMITTERS + "\n\nExample: survey-utils generate-doc ./entries/chunks/model.ts --md --json",
+      + EMITTERS + "\n\nExample: survey-utils generate-doc library --md --json",
       true
+    );
+  }
+  // --md and --json document one product's API, so it has to be said which. The schema and the
+  // guide are survey-core's whatever else runs, which is why they need no product -- and why
+  // they cannot be asked of another one.
+  if ((res.md || res.json) && !named) {
+    throw new UsageError(
+      `Which product? --md and --json document one, so name it: ${PRODUCT_LIST}.\n\n`
+      + "  survey-utils generate-doc library --md --json\n\n"
+      + "Its entry files follow from the name; --json-definition and --llm-guide need no product, "
+      + "because both are survey-core's.",
+      true
+    );
+  }
+  if (!!named && named !== SERIALIZER_PRODUCT && (res.jsonDefinition || res.llmGuide)) {
+    const asked = [res.jsonDefinition ? "--json-definition" : "", res.llmGuide ? "--llm-guide" : ""]
+      .filter((flag) => !!flag).join(" and ");
+    throw new UsageError(
+      `${asked} cannot be generated for '${named}': the schema and the guide both come from `
+      + `survey-core, so they only apply to '${SERIALIZER_PRODUCT}'.\n`
+      + `Generate them on their own (no product), and document ${named} in a separate run.`
     );
   }
   if (res.jsonDefinition === "runtime" && !res.serializer) {
@@ -204,21 +258,29 @@ function parseDocArgs(args: string[]): DocArgs {
 }
 
 function generateDoc(args: DocArgs): number {
-  // The repo root of --path. Without it every path stays as the caller typed it and
-  // resolves against the working directory, which is what a product's own script wants.
-  const root = !!args.path ? requireDir(args.path) : undefined;
-  const at = (target: string): string => (!root ? target : path.resolve(root, target));
+  // The product's repo: --path, the working directory when the entries are already under it,
+  // or the sibling checkout. Every relative path the caller passed resolves against it.
+  const root = docRoot(args.product, args.path);
+  const at = (target: string): string => path.resolve(root, target);
 
-  // Before the bundle: an entry that is not there is the caller's mistake, and it is the one
-  // the report should name. Checked for every emitter, including the ones that never build the
-  // model, so an entry is never quietly ignored.
-  const entries = args.entries.map((entry) => requireEntryFile(entry, root));
+  // The product's own entries, unless the caller named others. Either way they are checked here,
+  // before the serializer bundle is loaded, so a run that gets both wrong blames the entry.
+  const entries = args.entries.length > 0
+    ? args.entries.map((entry) => requireEntryFile(entry, root))
+    : docEntries(args.product, root);
+  console.log(
+    `${args.product}: ${entries.map((entry) => path.relative(root, entry)).join(", ")} (under ${root})`
+  );
+
   const out = at(args.out);
   const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api");
 
   const bundle = !!args.serializer ? loadBundle(args.serializer, root) : null;
   const serializer = bundle ? bundle.Serializer : null;
   const files: FileMap = {};
+  // The front matter and the documentation URLs want the product's public name, not its key --
+  // 'library' is "Form Library". The table holds both, so nothing is guessed off the entry path.
+  const docProduct = docProducts[args.product].docProduct;
 
   const needsModel = args.md || args.json || args.jsonDefinition === "ast" || args.llmGuide;
   if (needsModel) {
@@ -230,7 +292,7 @@ function generateDoc(args: DocArgs): number {
     if (args.json) Object.assign(files, buildDocModelJSON(model, out));
     if (args.md) {
       Object.assign(files, buildMDFiles(model.classes, model.pmes, {
-        product: args.product,
+        product: docProduct,
         fileNames: entries,
         outputDir: mdOut,
         sourceBaseUrl: args.sourceBaseUrl
@@ -241,7 +303,7 @@ function generateDoc(args: DocArgs): number {
       const guide = buildLLMGuide(model, <any>bundle, {
         outputDir: out,
         fileNames: entries,
-        product: args.product,
+        product: docProduct,
         sourceBaseUrl: args.sourceBaseUrl,
         maxBytes: args.maxBytes,
         split: args.split,
