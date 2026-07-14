@@ -1,7 +1,9 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { docEntries, docProductNames, docProducts, docRoot, packageName } from "../src/doc-products";
+import {
+  docEntries, docOut, docProductNames, docProducts, docRoot, packageName
+} from "../src/doc-products";
 import { EntryFileError, ProductRootError, surveyUtilsRoot } from "../src/paths";
 
 /** A root that looks like `pkg`: a package.json with that name, and the files under it. */
@@ -69,6 +71,26 @@ test("docRoot takes --path as the root, and rejects one that is not there", () =
   const root = fakeRoot("survey-analytics", ["src/index.ts"]);
   expect(docRoot("analytics", root)).toEqual(root);
   expect(() => docRoot("analytics", path.join(root, "nope"))).toThrow(ProductRootError);
+});
+
+test("without --out a product writes the docs of the package it is documented from", () => {
+  // The same folder from either root: packages/survey-core/docs named from the repo, ./docs named
+  // from inside the package -- so the script in survey-core and a run at the repo root agree.
+  expect(docOut("library", fakeRoot("survey-library", ["packages/survey-core/entries/chunks/model.ts"])))
+    .toEqual("packages/survey-core/docs");
+  expect(docOut("library", fakeRoot("survey-core", ["entries/chunks/model.ts"]))).toEqual("docs");
+
+  expect(docOut("creator", fakeRoot("survey-creator", ["packages/survey-creator-core/src/entries/index.ts"])))
+    .toEqual("packages/survey-creator-core/docs");
+  expect(docOut("creator", fakeRoot("survey-creator-core", ["src/entries/index.ts"]))).toEqual("docs");
+});
+
+test("a product whose repo is the package writes ./docs, and so does a root no layout claims", () => {
+  expect(docOut("analytics", fakeRoot("survey-analytics", ["src/index.ts"]))).toEqual("docs");
+  expect(docOut("pdf", fakeRoot("survey-pdf", ["src/entries/pdf.ts", "src/entries/forms.ts"])))
+    .toEqual("docs");
+  // --entry documenting a fork: no layout matches, so there is no docs folder to take from one.
+  expect(docOut("library", fakeRoot("survey-fork", ["src/index.ts"]))).toEqual("docs");
 });
 
 test("every product carries the front-matter name the Markdown emitter writes", () => {

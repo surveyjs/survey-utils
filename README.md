@@ -259,8 +259,9 @@ release and a missing one aborts the check with an explanatory message.
     "doc_gen": "survey-utils generate-doc library --serializer ./build/survey.core --md --json-definition",
 
     // The LLM authoring guide, alongside the schema. Both come from the built bundle, and both
-    // are survey-core's, so neither needs the product named.
-    "llm_guide": "survey-utils generate-doc --serializer ./build/survey.core --llm-guide --json-definition --out ./docs",
+    // are survey-core's, so neither needs the product named. No --out either: this package's
+    // docs folder is where 'library' writes from anywhere.
+    "llm_guide": "survey-utils generate-doc --serializer ./build/survey.core --llm-guide --json-definition",
 
     // CI: regenerate in memory, diff against disk, exit 1 when someone changed survey-core
     // and did not regenerate. Output is deterministic, so two runs are byte-identical.
@@ -507,12 +508,15 @@ instead of two.
 survey-utils generate-doc [product] [options]
 ```
 
-| Product | Documented from | Front matter |
-| --- | --- | --- |
-| `library` | `packages/survey-core/entries/chunks/model.ts` | Form Library |
-| `creator` | `packages/survey-creator-core/src/entries/index.ts` | Survey Creator |
-| `analytics` | `src/index.ts` | Dashboard |
-| `pdf` | `src/entries/pdf.ts` **and** `src/entries/forms.ts` | PDF Generator |
+| Product | Documented from | Front matter | Default out |
+| --- | --- | --- | --- |
+| `library` | `packages/survey-core/entries/chunks/model.ts` | Form Library | `packages/survey-core/docs` |
+| `creator` | `packages/survey-creator-core/src/entries/index.ts` | Survey Creator | `packages/survey-creator-core/docs` |
+| `analytics` | `src/index.ts` | Dashboard | `docs` |
+| `pdf` | `src/entries/pdf.ts` **and** `src/entries/forms.ts` | PDF Generator | `docs` |
+
+The `Default out` column is relative to the repo root. A run from inside the package writes that
+same folder as `./docs`, because it is already there.
 
 The entry files are a fact of each repo's layout, not a decision the caller makes — so the product
 is all that is named, and the table above (in [doc-products.ts](src/doc-products.ts)) supplies the
@@ -534,7 +538,9 @@ so a run that names none writes nothing and is a mistake, not a no-op: it exits 
 the four flags above to choose from, rather than pointing at the usage text.
 `--serializer <path>` names the built product bundle (`./build/survey.core`) whose `Serializer`
 supplies the metadata; it is optional, because survey-creator generates docs without one.
-`--out <dir>` defaults to `./docs`, `--check` diffs against disk instead of writing.
+`--out <dir>` defaults to the docs folder of the package the product is documented from — the
+`Default out` column above — so a run from the repo root and a run from the package itself write
+the same folder; `--check` diffs against disk instead of writing.
 
 **Which emitters need the product.** `--md` and `--json` document one product's API, so the run has
 to say which — omit it and the command exits `2` listing the four. `--json-definition` and

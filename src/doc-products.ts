@@ -24,6 +24,12 @@ interface DocLayout {
   pkg: string;
   /** The entries, relative to that root. Several when a product documents them together. */
   entries: string[];
+  /**
+   * Where the docs go without --out, relative to that root. The folder is the same one either
+   * way -- the package's own `docs` -- so a repo-root layout has to name the package to reach
+   * it, and a package-root layout is already there. Default: DEFAULT_DOCS.
+   */
+  docs?: string;
 }
 
 export interface DocProduct {
@@ -39,12 +45,19 @@ export interface DocProduct {
   layouts: DocLayout[];
 }
 
+/** Where a layout that names no folder of its own writes: the docs of the root it ran from. */
+export const DEFAULT_DOCS = "docs";
+
 export const docProducts: { [key: string]: DocProduct } = {
   library: {
     repo: "survey-library",
     docProduct: "Form Library",
     layouts: [
-      { pkg: "survey-library", entries: ["packages/survey-core/entries/chunks/model.ts"] },
+      {
+        pkg: "survey-library",
+        entries: ["packages/survey-core/entries/chunks/model.ts"],
+        docs: "packages/survey-core/docs"
+      },
       { pkg: "survey-core", entries: ["entries/chunks/model.ts"] }
     ]
   },
@@ -52,7 +65,11 @@ export const docProducts: { [key: string]: DocProduct } = {
     repo: "survey-creator",
     docProduct: "Survey Creator",
     layouts: [
-      { pkg: "survey-creator", entries: ["packages/survey-creator-core/src/entries/index.ts"] },
+      {
+        pkg: "survey-creator",
+        entries: ["packages/survey-creator-core/src/entries/index.ts"],
+        docs: "packages/survey-creator-core/docs"
+      },
       { pkg: "survey-creator-core", entries: ["src/entries/index.ts"] }
     ]
   },
@@ -125,4 +142,15 @@ export function docEntries(key: string, root: string): string[] {
       .join("\n")
     + `\n--path must name the root of ${product.repo}, or the package inside it that holds the entry.`
   );
+}
+
+/**
+ * Where the run writes without --out, relative to `root`: the docs folder of the package the
+ * product is documented from -- packages/survey-core/docs, packages/survey-creator-core/docs --
+ * named from wherever the run started, so both roots land in the same folder. A root no layout
+ * claims (--entry documenting a fork) has none to take, and writes ./docs as before.
+ */
+export function docOut(key: string, root: string): string {
+  const layout = layoutAt(docProducts[key], root);
+  return !!layout && !!layout.docs ? layout.docs : DEFAULT_DOCS;
 }

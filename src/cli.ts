@@ -9,7 +9,7 @@ import { runCheckUnusedStrings } from "./checkUnusedStrings";
 import { products } from "./loc-lint";
 import { PathError, requireEntryFile } from "./paths";
 import {
-  docEntries, docProductNames, docProducts, docRoot, SERIALIZER_PRODUCT
+  docEntries, docOut, docProductNames, docProducts, docRoot, SERIALIZER_PRODUCT
 } from "./doc-products";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 
@@ -77,7 +77,11 @@ ${EMITTERS}
   --with-member-links       Member-level API links in the split files. Off by default: ~400
                             links cost 6-10k tokens, and only a reader that can fetch them pays off.
 
-  --out <dir>               Output root. Default: ./docs
+  --out <dir>               Output root, resolved against --path. Default: the docs folder of the
+                            package the product is documented from -- library writes
+                            packages/survey-core/docs, creator packages/survey-creator-core/docs,
+                            analytics and pdf ./docs -- so a run from the repo root and a run from
+                            the package itself both land in the same folder.
   --check                   Generate in memory, diff against what is on disk, exit 1 if they differ.
 
 survey-utils check-strings [product] [--list-dead] [--path <dir>]
@@ -116,7 +120,8 @@ interface DocArgs {
   withMemberLinks: boolean;
   mdOut?: string;
   sourceBaseUrl?: string;
-  out: string;
+  /** --out. Absent: the docs folder of the package the product is documented from, see docOut(). */
+  out?: string;
   check: boolean;
 }
 
@@ -138,7 +143,7 @@ function parseDocArgs(args: string[]): DocArgs {
   // that needs a product to be named is rejected below before this stands in for one.
   const res: DocArgs = {
     product: SERIALIZER_PRODUCT, entries: [], md: false, json: false, llmGuide: false,
-    split: false, withMemberLinks: false, out: "docs", check: false
+    split: false, withMemberLinks: false, check: false
   };
   let named: string | undefined = undefined;
   for (let i = 0; i < args.length; i++) {
@@ -272,7 +277,9 @@ function generateDoc(args: DocArgs): number {
     `${args.product}: ${entries.map((entry) => path.relative(root, entry)).join(", ")} (under ${root})`
   );
 
-  const out = at(args.out);
+  // Without --out the docs go to the package they document -- packages/survey-core/docs whether
+  // the run started at the repo root or in the package itself, so both write the same folder.
+  const out = at(!!args.out ? args.out : docOut(args.product, root));
   const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api");
 
   const bundle = !!args.serializer ? loadBundle(args.serializer, root) : null;
