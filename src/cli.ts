@@ -10,6 +10,21 @@ import { products } from "./loc-lint";
 import { PathError, requireDir, requireEntryFile } from "./paths";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 
+/**
+ * The emitters, in one place: the usage text lists them, and so does the error a run that
+ * selected none reports. Nothing generates without one, so that error has to answer "which
+ * flags are there, then" on the spot rather than point at the usage text.
+ */
+const EMITTERS = `  --md                      Markdown API docs: <ClassName>.md per class + index.md.
+  --json                    The raw doc model: classes.json + pmes.json.
+  --json-definition[=runtime|ast]
+                            JSON Schema. 'runtime' (default) is Serializer.generateSchema() and
+                            requires --serializer; 'ast' is the doc-generator's AST-derived
+                            document of the same name -- a different, larger schema.
+  --llm-guide               llm-guide.md: the authoring guide an LLM is given as context so the
+                            SurveyJS JSON it writes loads. Needs --serializer. Also emits
+                            llms.txt, listing the guide and the schema.`;
+
 const USAGE = `survey-utils <command> [options]
 
 Commands:
@@ -39,15 +54,7 @@ survey-utils generate-doc <entry...> [options]
                             serializer-derived section is skipped.
 
   Emitters -- independently selectable, at least one required:
-  --md                      Markdown API docs: <ClassName>.md per class + index.md.
-  --json                    The raw doc model: classes.json + pmes.json.
-  --json-definition[=runtime|ast]
-                            JSON Schema. 'runtime' (default) is Serializer.generateSchema() and
-                            requires --serializer; 'ast' is the doc-generator's AST-derived
-                            document of the same name -- a different, larger schema.
-  --llm-guide               llm-guide.md: the authoring guide an LLM is given as context so the
-                            SurveyJS JSON it writes loads. Needs --serializer. Also emits
-                            llms.txt, listing the guide and the schema.
+${EMITTERS}
 
   Markdown options:
   --product <name>          Front-matter product. Default: detected from the entry path.
@@ -101,7 +108,15 @@ interface DocArgs {
   check: boolean;
 }
 
-class UsageError extends Error { }
+class UsageError extends Error {
+  /**
+   * @param selfContained The message already says everything the caller needs, so the usage
+   * text is not appended: it would bury the report it is supposed to support.
+   */
+  constructor(message: string, public readonly selfContained: boolean = false) {
+    super(message);
+  }
+}
 
 function parseDocArgs(args: string[]): DocArgs {
   const res: DocArgs = {
@@ -161,9 +176,13 @@ function parseDocArgs(args: string[]): DocArgs {
     throw new UsageError("No entry file. Example: survey-utils generate-doc ./entries/chunks/model.ts --md");
   }
   if (!res.md && !res.json && !res.jsonDefinition && !res.llmGuide) {
-    // Deliberately not inheriting doc-generator's implicit markdown-or-JSON default.
+    // Deliberately not inheriting doc-generator's implicit markdown-or-JSON default: a run
+    // that names no emitter writes nothing, so it is a mistake, not a default. The flags are
+    // the whole answer to it, so report them here instead of pointing at the usage text.
     throw new UsageError(
-      "No emitter selected. Pass at least one of --md, --json, --json-definition, --llm-guide."
+      "No emitter selected: generate-doc writes nothing on its own. Pass at least one of:\n\n"
+      + EMITTERS + "\n\nExample: survey-utils generate-doc ./entries/chunks/model.ts --md --json",
+      true
     );
   }
   if (res.jsonDefinition === "runtime" && !res.serializer) {
@@ -283,7 +302,10 @@ function main(): void {
     }
     const usage = error instanceof UsageError || error instanceof TranslateUsageError;
     console.error(usage ? String(error.message) : String(error instanceof Error ? error.stack : error));
-    if (usage) console.error("\n" + USAGE);
+    // A self-contained usage error listed what the caller has to choose from: appending the
+    // whole usage text below it would only push that list off the screen.
+    const selfContained = error instanceof UsageError && error.selfContained;
+    if (usage && !selfContained) console.error("\n" + USAGE);
     process.exit(usage ? 2 : 1);
   }
 }

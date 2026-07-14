@@ -474,7 +474,9 @@ survey-utils generate-doc <entry...> [options]
 | `--llm-guide` | `llm-guide.md`, the authoring guide an LLM is given as context — needs `--serializer`. Also emits `llms.txt` |
 
 They are independently selectable: the model is built once and fanned out to whichever emitters
-were asked for. At least one is required — unlike the old generator, there is no implicit default.
+were asked for. At least one is required — unlike the old generator, there is no implicit default,
+so a run that names none writes nothing and is a mistake, not a no-op: it exits **2** and prints
+the four flags above to choose from, rather than pointing at the usage text.
 `--serializer <path>` names the built product bundle (`./build/survey.core`) whose `Serializer`
 supplies the metadata; it is optional, because survey-creator generates docs without one.
 `--out <dir>` defaults to `./docs`, `--check` diffs against disk instead of writing.
