@@ -217,6 +217,43 @@ describe("generateMDFiles", () => {
     });
   });
 
+  describe("variable file (variable fixture)", () => {
+    let files: { [name: string]: string };
+    beforeAll(() => {
+      const docs = runDocGenerator("variable");
+      files = runMDGenerator(docs.classes, docs.pmes);
+    });
+
+    test("an exported documented variable produces a <name>.md file marked api-type: variable", () => {
+      const md = files["settings.md"];
+      expect(md).toBeDefined();
+      expect(md).toContain("title: settings");
+      expect(md).toContain("api-type: variable");
+      expect(md).toContain("source: https://surveyjs.io/form-library/documentation/api-reference/settings");
+      expect(md).toContain("# `settings`");
+      expect(md).toContain("Global settings that control the library behavior.");
+    });
+
+    test("the variable's members are rendered as properties", () => {
+      const md = files["settings.md"];
+      expect(md).toContain("## Properties");
+      expect(md).toContain("### `commentSuffix`");
+      expect(md).toContain("**Type**: `string`");
+      expect(md).toContain("### `confirmDelete`");
+      expect(md).toContain("**Type**: `boolean`");
+    });
+
+    test("a variable without a description does not produce a file", () => {
+      const entries = [
+        { name: "documentedVar", entryType: 4, documentation: "A documented variable." },
+        { name: "silentVar", entryType: 4, documentation: "   " }
+      ];
+      const out = runMDGenerator(entries as any, []);
+      expect(out["documentedVar.md"]).toBeDefined();
+      expect(out["silentVar.md"]).toBeUndefined();
+    });
+  });
+
   describe("inheritance chain (inheritance fixture)", () => {
     test("the Inheritance section lists base types from the root down to the class", () => {
       const docs = runDocGenerator("inheritance");
@@ -364,7 +401,8 @@ describe("generateMDFiles", () => {
       { name: "NoDescription", entryType: 1, documentation: "   " },
       { name: "IPanel", entryType: 2, documentation: "A panel interface. Second sentence." },
       { name: "ISmallOne", entryType: 2, documentation: "A small interface. Second sentence." },
-      { name: "INoDescription", entryType: 2, documentation: "   " }
+      { name: "INoDescription", entryType: 2, documentation: "   " },
+      { name: "settings", entryType: 4, documentation: "Global settings. Second sentence." }
     ];
     const pmes = [
       { className: "SurveyModel", name: "a", pmeType: "property", documentation: "Prop a." },
@@ -414,6 +452,16 @@ describe("generateMDFiles", () => {
 
     test("classes and interfaces without a description are not listed", () => {
       expect(md).not.toContain("NoDescription");
+    });
+
+    test("variables are listed in their own section, after the interfaces", () => {
+      const posInterfaces = md.indexOf("# Interfaces");
+      const posVariables = md.indexOf("# Variables");
+      expect(posInterfaces).toBeGreaterThan(-1);
+      expect(posInterfaces).toBeLessThan(posVariables);
+      expect(md).toContain(
+        "- [`settings`](https://surveyjs.io/form-library/documentation/api-reference/settings.md) — Global settings."
+      );
     });
 
     test("each class name is a link to its api-reference page", () => {

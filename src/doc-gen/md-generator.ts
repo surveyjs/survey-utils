@@ -46,7 +46,7 @@ export function buildMDFiles(
   const product = options.product || detectProduct(options.fileNames, process.cwd());
   for (let i = 0; i < classes.length; i++) {
     const cls = classes[i];
-    if (!isClassOrInterface(cls) || !cls.name || !hasDescription(cls)) continue;
+    if (!isDocumentedEntry(cls) || !cls.name || !hasDescription(cls)) continue;
     files[path.join(outputDir, cls.name + ".md")] =
       generateMDForClass(cls, members, product, options.sourceBaseUrl);
   }
@@ -81,6 +81,7 @@ export function generateIndexMD(
   const lines = ["---", "title: Classes and Interfaces", "---"];
   addIndexSection(lines, "Classes", all, DocEntryType.classType, members, product, sourceBaseUrl);
   addIndexSection(lines, "Interfaces", all, DocEntryType.interfaceType, members, product, sourceBaseUrl);
+  addIndexSection(lines, "Variables", all, DocEntryType.variableType, members, product, sourceBaseUrl);
   return lines.join("\n") + "\n";
 }
 
@@ -105,16 +106,24 @@ function addIndexSection(
   }
 }
 
-function isClassOrInterface(cls: DocEntry): boolean {
+function isDocumentedEntry(cls: DocEntry): boolean {
   return !!cls
-    && (cls.entryType === DocEntryType.classType || cls.entryType === DocEntryType.interfaceType);
+    && (cls.entryType === DocEntryType.classType
+      || cls.entryType === DocEntryType.interfaceType
+      || cls.entryType === DocEntryType.variableType);
+}
+
+/** The `api-type` front-matter value for an entry (`class`, `interface` or `variable`). */
+function apiType(cls: DocEntry): string {
+  if (cls.entryType === DocEntryType.interfaceType) return "interface";
+  if (cls.entryType === DocEntryType.variableType) return "variable";
+  return "class";
 }
 
 /** Builds the Markdown content for a single class/interface. */
 export function generateMDForClass(
   cls: DocEntry, pmes: DocEntry[], product: string, sourceBaseUrl?: string
 ): string {
-  const isInterface = cls.entryType === DocEntryType.interfaceType;
   const members = pmes
     .filter((p) => p.className === cls.name && isVisibleMember(p))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
@@ -123,7 +132,7 @@ export function generateMDForClass(
   const events = members.filter((p) => p.pmeType === "event");
 
   const parts: string[] = [];
-  parts.push(frontMatter(cls, product, isInterface, sourceBaseUrl));
+  parts.push(frontMatter(cls, product, apiType(cls), sourceBaseUrl));
   parts.push("# `" + cls.name + "`");
   const description = (cls.documentation || "").trim();
   if (description) parts.push(description);
@@ -136,7 +145,7 @@ export function generateMDForClass(
 }
 
 function frontMatter(
-  cls: DocEntry, product: string, isInterface: boolean, sourceBaseUrl?: string
+  cls: DocEntry, product: string, apiType: string, sourceBaseUrl?: string
 ): string {
   const title = cls.metaTitle || cls.name || "";
   const description = firstSentence(stripMarkdownLinks(cls.metaDescription || cls.documentation));
@@ -145,7 +154,7 @@ function frontMatter(
     "---",
     "title: " + yamlScalar(title),
     "product: " + yamlScalar(product),
-    "api-type: " + (isInterface ? "interface" : "class"),
+    "api-type: " + apiType,
     "description: " + yamlScalar(description),
     "source: " + yamlScalar(source),
     "---"
