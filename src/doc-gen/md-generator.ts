@@ -78,14 +78,21 @@ export function generateIndexMD(
 ): string {
   const members = Array.isArray(pmes) ? pmes : [];
   const all = Array.isArray(classes) ? classes : [];
-  const lines = ["---", "title: Classes and Interfaces", "---"];
+  const lines = [
+    "---",
+    "title: Classes and Interfaces",
+    "product: " + yamlScalar(product),
+    "---",
+    "",
+    "# SurveyJS " + product + " API Reference"
+  ];
   addIndexSection(lines, "Classes", all, DocEntryType.classType, members, product, sourceBaseUrl);
   addIndexSection(lines, "Interfaces", all, DocEntryType.interfaceType, members, product, sourceBaseUrl);
   addIndexSection(lines, "Variables", all, DocEntryType.variableType, members, product, sourceBaseUrl);
   return lines.join("\n") + "\n";
 }
 
-/** Appends one `# <title>` section listing all entries of the given entry type. */
+/** Appends one `## <title>` section listing all entries of the given entry type. */
 function addIndexSection(
   lines: string[], title: string, classes: DocEntry[], entryType: DocEntryType,
   members: DocEntry[], product: string, sourceBaseUrl?: string
@@ -98,7 +105,7 @@ function addIndexSection(
       count: members.filter((p) => p.className === cls.name && isVisibleMember(p)).length
     }))
     .sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name));
-  lines.push("", "# " + title, "");
+  lines.push("", "## " + title, "");
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     const link = "[`" + entry.name + "`](" + sourceUrl(product, entry.name, sourceBaseUrl) + ".md)";

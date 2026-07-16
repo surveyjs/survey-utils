@@ -434,9 +434,30 @@ describe("generateMDFiles", () => {
       expect(posMid).toBeLessThan(posSmall);
     });
 
+    test("the index file starts with the front matter and API-reference heading", () => {
+      expect(md).toContain("---\ntitle: Classes and Interfaces\nproduct: Form Library\n---");
+      expect(md).toContain("# SurveyJS Form Library API Reference");
+      expect(md.indexOf("# SurveyJS Form Library API Reference")).toBeLessThan(md.indexOf("## Classes"));
+    });
+
+    test("the front-matter product and heading follow the given product", () => {
+      const out = generateIndexMD(classes as any, pmes as any, "Survey Creator");
+      expect(out).toContain("product: Survey Creator");
+      expect(out).toContain("# SurveyJS Survey Creator API Reference");
+    });
+
+    test("the section titles use level-two headings", () => {
+      expect(md).toContain("## Classes");
+      expect(md).toContain("## Interfaces");
+      expect(md).toContain("## Variables");
+      expect(md).not.toContain("\n# Classes");
+      expect(md).not.toContain("\n# Interfaces");
+      expect(md).not.toContain("\n# Variables");
+    });
+
     test("interfaces are listed in their own section, after the classes", () => {
-      const posClasses = md.indexOf("# Classes");
-      const posInterfaces = md.indexOf("# Interfaces");
+      const posClasses = md.indexOf("## Classes");
+      const posInterfaces = md.indexOf("## Interfaces");
       expect(posClasses).toBeGreaterThan(-1);
       expect(posClasses).toBeLessThan(posInterfaces);
       expect(md.indexOf("SurveyModel")).toBeLessThan(posInterfaces);
@@ -455,8 +476,8 @@ describe("generateMDFiles", () => {
     });
 
     test("variables are listed in their own section, after the interfaces", () => {
-      const posInterfaces = md.indexOf("# Interfaces");
-      const posVariables = md.indexOf("# Variables");
+      const posInterfaces = md.indexOf("## Interfaces");
+      const posVariables = md.indexOf("## Variables");
       expect(posInterfaces).toBeGreaterThan(-1);
       expect(posInterfaces).toBeLessThan(posVariables);
       expect(md).toContain(
