@@ -34,12 +34,19 @@ export interface DocOptions {
   mdOptions?: MDGenerationOptions;
 }
 
+function isOutsideRoot(rootDir: string, fileName: string): boolean {
+  const rel = path.relative(path.resolve(rootDir), path.resolve(fileName));
+  return !rel || rel.startsWith("..") || path.isAbsolute(rel);
+}
+
 /**
  * Walks the TypeScript sources reachable from `fileNames` and joins them with the
  * Serializer metadata supplied via setJsonObj(), producing the doc model that every
  * emitter consumes. Returns null when an entry file does not exist.
  */
-export function buildModel(fileNames: string[], options: ts.CompilerOptions): DocModel | null {
+export function buildModel(
+  fileNames: string[], options: ts.CompilerOptions, rootDir?: string
+): DocModel | null {
   const vueGeneratedFiles: string[] = [];
   const tsOptions: ts.CompilerOptions = getTsOptions(options);
   if (!checkFiles(fileNames, "File for compiling is not found")) return null;
@@ -66,6 +73,7 @@ export function buildModel(fileNames: string[], options: ts.CompilerOptions): Do
     for (const sourceFile of program.getSourceFiles()) {
       if (sourceFile.fileName.indexOf("node_modules") > 0) continue;
       if (isNonEnglishLocalizationFile(sourceFile.fileName)) continue;
+      if (!!rootDir && isOutsideRoot(rootDir, sourceFile.fileName)) continue;
       sourceFiles.push(sourceFile.fileName);
       // Walk the tree to search for classes
       ts.forEachChild(sourceFile, (node: ts.Node) => visit(ctx, node));
