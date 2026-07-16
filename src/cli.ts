@@ -342,7 +342,7 @@ function generateDoc(args: DocArgs): number {
     if (!!serializer) setJsonObj(serializer);
     const model = buildModel(entries, {
       target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS
-    });
+    }, root);
     if (!model) return 1;
     if (args.json) Object.assign(files, buildDocModelJSON(model, out));
     if (args.md) {
