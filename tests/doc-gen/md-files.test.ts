@@ -135,6 +135,63 @@ describe("generateMDFiles", () => {
     });
   });
 
+  describe("members declared with several types", () => {
+    const classes = [{ name: "Sample", entryType: 1, documentation: "A sample class." }];
+
+    test("a property declared with several types is listed once with the union of its types", () => {
+      // The doc generator emits one entry per declaration, so an overloaded
+      // getter/setter reaches the renderer several times under the same name.
+      const pmes = [
+        { className: "Sample", name: "raw", pmeType: "property", type: "string", documentation: "The raw value." },
+        { className: "Sample", name: "raw", pmeType: "property", type: "ArrayBuffer", documentation: "The raw value." },
+        { className: "Sample", name: "raw", pmeType: "property", type: "Blob", documentation: "The raw value." }
+      ];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      // Exactly one heading for the member.
+      expect(md.match(/### `raw`/g)?.length).toBe(1);
+      // A single Type line carries the union of all declared types.
+      expect(md).toContain("**Type**: `string | ArrayBuffer | Blob`");
+    });
+
+    test("duplicate property entries with the same type collapse to a single type", () => {
+      const pmes = [
+        { className: "Sample", name: "count", pmeType: "property", type: "number", documentation: "A count." },
+        { className: "Sample", name: "count", pmeType: "property", type: "number", documentation: "A count." }
+      ];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md.match(/### `count`/g)?.length).toBe(1);
+      expect(md).toContain("**Type**: `number`");
+    });
+
+    test("a method declared with several return types is listed once with the union", () => {
+      const pmes = [
+        {
+          className: "Sample", name: "getData", pmeType: "method", returnType: "string",
+          documentation: "Gets the data."
+        },
+        {
+          className: "Sample", name: "getData", pmeType: "method", returnType: "ArrayBuffer",
+          documentation: "Gets the data."
+        }
+      ];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md.match(/### `getData\(\)`/g)?.length).toBe(1);
+      expect(md).toContain("**Return value:** `string | ArrayBuffer`");
+    });
+
+    test("distinct members are not merged", () => {
+      const pmes = [
+        { className: "Sample", name: "alpha", pmeType: "property", type: "string", documentation: "Alpha." },
+        { className: "Sample", name: "beta", pmeType: "property", type: "number", documentation: "Beta." }
+      ];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("### `alpha`");
+      expect(md).toContain("### `beta`");
+      expect(md).toContain("**Type**: `string`");
+      expect(md).toContain("**Type**: `number`");
+    });
+  });
+
   describe("interface file (members fixture)", () => {
     let files: { [name: string]: string };
     beforeAll(() => {

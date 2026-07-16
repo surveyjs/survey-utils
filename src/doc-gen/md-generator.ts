@@ -166,10 +166,13 @@ function inheritanceSection(cls: DocEntry, product: string, sourceBaseUrl?: stri
 }
 
 function propertiesSection(properties: DocEntry[]): string {
-  const blocks = properties.map((prop) => {
+  const blocks = groupByName(properties).map((group) => {
     // Order: name (heading), type, description, then the related APIs.
+    const prop = group[0];
     const lines = ["### `" + prop.name + "`"];
-    lines.push("**Type**: `" + typeString(prop.type, prop.returnTypeGenerics) + "`");
+    // A member that appears with several types (e.g. a getter/setter declared
+    // more than once) is listed once with the union of its types.
+    lines.push("**Type**: `" + unionTypeString(group, (p) => typeString(p.type, p.returnTypeGenerics)) + "`");
     const doc = (prop.documentation || "").trim();
     if (doc) lines.push(doc);
     addRelatedAPIs(lines, prop);
@@ -179,10 +182,11 @@ function propertiesSection(properties: DocEntry[]): string {
 }
 
 function methodsSection(methods: DocEntry[]): string {
-  const blocks = methods.map((method) => {
+  const blocks = groupByName(methods).map((group) => {
     // Order: name (heading), type (return value), description, parameters, related APIs.
+    const method = group[0];
     const lines = ["### `" + method.name + "()`"];
-    const returnValue = returnValueLine(method);
+    const returnValue = returnValueLine(method, group);
     if (returnValue) lines.push(returnValue);
     const doc = (method.documentation || "").trim();
     if (doc) lines.push(doc);
@@ -195,7 +199,8 @@ function methodsSection(methods: DocEntry[]): string {
 }
 
 function eventsSection(events: DocEntry[]): string {
-  const blocks = events.map((event) => {
+  const blocks = groupByName(events).map((group) => {
+    const event = group[0];
     const lines = ["### `" + event.name + "`"];
     const doc = (event.documentation || "").trim();
     if (doc) lines.push(doc);
@@ -203,6 +208,38 @@ function eventsSection(events: DocEntry[]): string {
     return lines.join("\n\n");
   });
   return "## Events\n\n" + blocks.join("\n\n");
+}
+
+/**
+ * Groups members by name, preserving the order of first appearance. The doc
+ * generator emits a separate entry for every declaration of a member, so a
+ * member declared with several types (e.g. an overloaded getter/setter) reaches
+ * the renderer more than once. Grouping collapses those into a single block.
+ */
+function groupByName(members: DocEntry[]): DocEntry[][] {
+  const groups: DocEntry[][] = [];
+  const byName: { [name: string]: DocEntry[] } = {};
+  for (let i = 0; i < members.length; i++) {
+    const name = members[i].name || "";
+    let group = byName[name];
+    if (!group) {
+      group = [];
+      byName[name] = group;
+      groups.push(group);
+    }
+    group.push(members[i]);
+  }
+  return groups;
+}
+
+/** Joins the distinct type strings of a member group into a `A | B` union. */
+function unionTypeString(group: DocEntry[], toType: (member: DocEntry) => string): string {
+  const types: string[] = [];
+  for (let i = 0; i < group.length; i++) {
+    const type = toType(group[i]);
+    if (type && types.indexOf(type) < 0) types.push(type);
+  }
+  return types.join(" | ");
 }
 
 /**
@@ -230,8 +267,8 @@ function seeNames(see: any): string[] {
     .filter((name) => !!name);
 }
 
-function returnValueLine(method: DocEntry): string {
-  const type = typeString(method.returnType, method.returnTypeGenerics);
+function returnValueLine(method: DocEntry, group: DocEntry[] = [method]): string {
+  const type = unionTypeString(group, (m) => typeString(m.returnType, m.returnTypeGenerics));
   if (!type || type === "void") return "";
   const returnDoc = oneLine(method.returnDocumentation);
   let line = "**Return value:** `" + type + "`";
