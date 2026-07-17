@@ -534,11 +534,11 @@ describe("generateMDFiles", () => {
       expect(files["SimpleModel.md"]).toBeUndefined();
     });
 
-    test("without outputDir the files go to docs (Markdown to docs/api)", () => {
+    test("without outputDir the files go to docs (Markdown to docs/api-reference)", () => {
       runFullGenerator("smoke", {});
       expect(dirOf("classes.json")).toBe(path.join(process.cwd(), "docs"));
       runFullGenerator("smoke", { generateMDFiles: true });
-      expect(dirOf("SimpleModel.md")).toBe(path.join(process.cwd(), "docs", "api"));
+      expect(dirOf("SimpleModel.md")).toBe(path.join(process.cwd(), "docs", "api-reference"));
     });
 
     test("outputDir sets the directory of the JSON files", () => {

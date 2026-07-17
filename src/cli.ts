@@ -339,7 +339,7 @@ function generateDoc(args: DocArgs): number {
   // Without --out the docs go to the package they document -- packages/survey-core/docs whether
   // the run started at the repo root or in the package itself, so both write the same folder.
   const out = at(!!args.out ? args.out : docOut(args.product, root));
-  const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api");
+  const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api-reference");
 
   const bundle = loadDocBundle(args, root);
   const serializer = bundle ? bundle.Serializer : null;

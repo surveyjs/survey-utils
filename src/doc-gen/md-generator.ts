@@ -42,7 +42,7 @@ export function buildMDFiles(
   const files: FileMap = {};
   if (!Array.isArray(classes)) return files;
   const members = Array.isArray(pmes) ? pmes : [];
-  const outputDir = resolveDir(options.outputDir || path.join(process.cwd(), "docs", "api"));
+  const outputDir = resolveDir(options.outputDir || path.join(process.cwd(), "docs", "api-reference"));
   const product = options.product || detectProduct(options.fileNames, process.cwd());
   for (let i = 0; i < classes.length; i++) {
     const cls = classes[i];
