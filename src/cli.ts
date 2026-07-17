@@ -47,9 +47,9 @@ its own package.json needs no --path.
 
 survey-utils generate-doc <preset> [--path <dir>] [--out <dir>]
 
-  Presets bundle a fixed set of emitters for a product -- the Form Library, Survey Creator or the
-  PDF Generator -- so a release script names one instead of listing flags. They take only --path
-  and --out; every other option is ignored.
+  Presets bundle a fixed set of emitters for a product -- the Form Library, Survey Creator, the
+  PDF Generator or the Dashboard -- so a release script names one instead of listing flags. They
+  take only --path and --out; every other option is ignored.
 
   library-build             The artifacts shipped inside the survey-core npm package:
                             llms.txt (copied from survey-utils' static/llms.txt) and
@@ -68,6 +68,11 @@ survey-utils generate-doc <preset> [--path <dir>] [--out <dir>]
   pdf-site                 The artifacts the website serves for the PDF Generator: classes.json and
                             pmes.json in <out>, and the Markdown API reference in <out>/api-reference.
                             The PDF Generator has no built bundle, so there is no schema or LLM guide.
+  analytics-build           Nothing: the Dashboard ships no generated doc artifacts in its package,
+                            so this preset is a no-op kept for symmetry with the others.
+  analytics-site           The artifacts the website serves for the Dashboard: classes.json and
+                            pmes.json in <out>, and the Markdown API reference in <out>/api-reference.
+                            The Dashboard has no built bundle, so there is no schema or LLM guide.
 
 survey-utils generate-doc [product] [options]
 
@@ -348,18 +353,20 @@ function loadDocBundle(args: DocArgs, root: string): SurveyBundle | null {
 
 /**
  * The presets: `generate-doc <product>-build` and `generate-doc <product>-site`, for the Form
- * Library, Survey Creator and the PDF Generator. Each is a named bundle of emitters -- a release
- * step names the preset instead of spelling out the flags, so the set of artifacts a build or a
- * site publish produces lives here, in one place, rather than in a script that could drift from it.
+ * Library, Survey Creator, the PDF Generator and the Dashboard. Each is a named bundle of emitters
+ * -- a release step names the preset instead of spelling out the flags, so the set of artifacts a
+ * build or a site publish produces lives here, in one place, rather than in a script that could
+ * drift from it.
  *
- * Library diverges from the rest because only survey-core has a built bundle: Creator and the PDF
- * Generator are documented AST/JSDoc only, so the schema and the LLM guide -- both generated from
- * survey-core's Serializer -- have no place in their presets. Their -build presets have nothing to
- * ship and do nothing; their -site presets emit only classes.json, pmes.json and the Markdown API
- * reference.
+ * Library diverges from the rest because only survey-core has a built bundle: Creator, the PDF
+ * Generator and the Dashboard are documented AST/JSDoc only, so the schema and the LLM guide --
+ * both generated from survey-core's Serializer -- have no place in their presets. Their -build
+ * presets have nothing to ship and do nothing; their -site presets emit only classes.json,
+ * pmes.json and the Markdown API reference.
  */
 const PRESETS = [
-  "library-build", "library-site", "creator-build", "creator-site", "pdf-build", "pdf-site"
+  "library-build", "library-site", "creator-build", "creator-site", "pdf-build", "pdf-site",
+  "analytics-build", "analytics-site"
 ] as const;
 type Preset = (typeof PRESETS)[number];
 
