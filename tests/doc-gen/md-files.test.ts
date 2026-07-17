@@ -362,6 +362,26 @@ describe("generateMDFiles", () => {
       expect(md).not.toContain("width *");
     });
 
+    test("a see entry that is a markdown link keeps its target URL", () => {
+      const url = "https://surveyjs.io/form-library/documentation/api-reference/settings#itemValueSeparator";
+      const pmes = [{
+        className: "Sample", name: "choicesSeparator", pmeType: "property", type: "string",
+        documentation: "Separator.", see: ["[settings.itemValueSeparator](" + url + ")"]
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("**Related APIs:** [`settings.itemValueSeparator`](" + url + ")");
+    });
+
+    test("markdown-link and plain see entries render side by side", () => {
+      const url = "https://surveyjs.io/settings#itemValueSeparator";
+      const pmes = [{
+        className: "Sample", name: "choicesSeparator", pmeType: "property", type: "string",
+        documentation: "Separator.", see: ["width", "[settings.itemValueSeparator](" + url + ")"]
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("**Related APIs:** [`width`](#width), [`settings.itemValueSeparator`](" + url + ")");
+    });
+
     test("the tags fixture renders the @see tags of ElementBase.name", () => {
       const docs = runDocGenerator("tags");
       const files = runMDGenerator(docs.classes, docs.pmes);

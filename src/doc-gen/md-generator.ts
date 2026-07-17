@@ -287,8 +287,22 @@ function sinceLine(entry: DocEntry): string {
 function addRelatedAPIs(lines: string[], member: DocEntry): void {
   const names = seeNames(member.see);
   if (names.length === 0) return;
-  const links = names.map((name) => "[`" + name + "`](#" + name + ")");
+  const links = names.map(relatedAPILink);
   lines.push("**Related APIs:** " + links.join(", "));
+}
+
+/**
+ * Renders a single `@see` entry as a Related APIs link. A plain identifier
+ * becomes an in-page anchor (`` [`name`](#name) ``). An entry that is already a
+ * markdown link (`[text](url)`, e.g. a cross-product reference) keeps its target
+ * URL and only wraps the link text in code formatting.
+ */
+function relatedAPILink(name: string): string {
+  const link = name.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+  if (link) {
+    return "[`" + link[1].trim() + "`](" + link[2].trim() + ")";
+  }
+  return "[`" + name + "`](#" + name + ")";
 }
 
 /**
