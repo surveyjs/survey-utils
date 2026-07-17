@@ -82,9 +82,9 @@ ${EMITTERS}
   --split                   Also emit one file per question type into <out>/llm-guide/.
   --with-member-links       Member-level API links in the split files. Off by default: ~400
                             links cost 6-10k tokens, and only a reader that can fetch them pays off.
-  --llm-guide-out <dir>     Write survey-json-authoring.md here instead of <out>, resolved against
-                            --path -- e.g. the guide to survey-core/llms while --md and the schema
-                            stay under <out>. Only the guide file moves; the split files and
+  --llm-guide-out <dir>     Where survey-json-authoring.md goes, resolved against --path.
+                            Default: llms -- the guide lands in survey-core/llms while --md and the
+                            schema stay under <out>. Only the guide file moves; the split files and
                             llms.txt stay in <out>.
 
   --out <dir>               Output root, resolved against --path. Default: the docs folder of the
@@ -132,7 +132,7 @@ interface DocArgs {
   sourceBaseUrl?: string;
   /** --out. Absent: the docs folder of the package the product is documented from, see docOut(). */
   out?: string;
-  /** --llm-guide-out: where survey-json-authoring.md goes when it must not sit in --out. */
+  /** --llm-guide-out: where survey-json-authoring.md goes. Absent: 'llms', not --out. */
   guideOut?: string;
   check: boolean;
 }
@@ -368,7 +368,7 @@ function generateDoc(args: DocArgs): number {
     if (args.llmGuide) {
       const guide = buildLLMGuide(model, <any>bundle, {
         outputDir: out,
-        guideOutputDir: !!args.guideOut ? at(args.guideOut) : undefined,
+        guideOutputDir: at(!!args.guideOut ? args.guideOut : "llms"),
         fileNames: entries,
         product: docProduct,
         sourceBaseUrl: args.sourceBaseUrl,

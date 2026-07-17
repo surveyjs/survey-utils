@@ -261,9 +261,9 @@ release and a missing one aborts the check with an explanatory message.
     "doc_gen": "survey-utils generate-doc library --md --json-definition",
 
     // The LLM authoring guide, alongside the schema. Both come from the built bundle, and both
-    // are survey-core's, so neither needs the product named. --llm-guide-out puts
-    // survey-json-authoring.md under ./llms while the schema stays in ./docs.
-    "llm_guide": "survey-utils generate-doc --llm-guide --json-definition --llm-guide-out llms",
+    // are survey-core's, so neither needs the product named. survey-json-authoring.md defaults
+    // to ./llms while the schema stays in ./docs; --llm-guide-out overrides that location.
+    "llm_guide": "survey-utils generate-doc --llm-guide --json-definition",
 
     // CI: regenerate in memory, diff against disk, exit 1 when someone changed survey-core
     // and did not regenerate. Output is deterministic, so two runs are byte-identical.
@@ -552,10 +552,10 @@ report the bundle they wanted and exit **2** rather than generate half a documen
 `Default out` column above — so a run from the repo root and a run from the package itself write
 the same folder; `--check` diffs against disk instead of writing.
 
-`--llm-guide-out <dir>` writes `survey-json-authoring.md` somewhere other than `--out`, resolved
-against `--path` the same way — the guide belongs under `survey-core/llms` while the API docs and
-the schema stay in `docs`. Only the guide file moves; the per-type `--split` files and `llms.txt`
-stay in `--out`. It only applies alongside `--llm-guide`.
+`--llm-guide-out <dir>` sets where `survey-json-authoring.md` is written, resolved against `--path`
+the same way as `--out`. It defaults to `llms` — the guide belongs under `survey-core/llms` while
+the API docs and the schema stay in `docs`. Only the guide file moves; the per-type `--split` files
+and `llms.txt` stay in `--out`. It only applies alongside `--llm-guide`.
 
 **Which emitters need the product.** `--md` and `--json` document one product's API, so the run has
 to say which — omit it and the command exits `2` listing the four. `--json-definition` and
