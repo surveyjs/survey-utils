@@ -575,6 +575,38 @@ cover — a fork, another chunk, another package — instead of the product's ow
 SurveyJS repos needs it; it exists so that an unusual layout is not a reason to go back to the old
 generator.
 
+### Presets
+
+A **preset** is a named bundle of emitters, so a release step names one instead of spelling out
+the flags — and the exact set of artifacts a build or a site publish produces lives in one place
+([cli.ts](src/cli.ts)) rather than in a script that could drift from it. Each product has two:
+
+```bash
+survey-utils generate-doc library-site  --path ../survey-library
+survey-utils generate-doc creator-site  --path ../survey-creator
+```
+
+Presets take **only `--path` and `--out`**; every other option is ignored — the preset decides
+the emitters, so there is nothing else to select. `--out` defaults to the product's docs folder,
+exactly as it does for a plain `generate-doc` run.
+
+| Preset | Emits |
+| --- | --- |
+| `library-build` | `llms.txt` (copied from survey-utils' `static/llms.txt`) and `surveyjs_definition.json` in `<out>`, and `survey-json-authoring.md` in `<out>/llms` |
+| `library-site` | `classes.json`, `pmes.json` and `surveyjs_definition.json` in `<out>`, `survey-json-authoring.md` in `<out>/llms`, and the Markdown API reference in `<out>/api-reference` |
+| `creator-site`, `pdf-site`, `analytics-site` | `classes.json` and `pmes.json` in `<out>`, and the Markdown API reference in `<out>/api-reference` |
+| `creator-build`, `pdf-build`, `analytics-build` | Nothing — a no-op (see below) |
+
+The two roles: **`-build`** is the artifacts shipped inside the product's npm package;
+**`-site`** is the artifacts the website serves.
+
+Only `library` has a built bundle, so only its presets emit the schema (`surveyjs_definition.json`)
+and the LLM guide (`survey-json-authoring.md`) — both are generated from survey-core's `Serializer`.
+Creator, the PDF Generator and the Dashboard are documented AST/JSDoc only, so their `-site` presets
+emit just the doc model (`classes.json` + `pmes.json`) and the Markdown reference, and their
+`-build` presets have nothing to ship and do nothing — kept for symmetry so a release script can
+name `<product>-build` uniformly.
+
 ### The schema and the guide
 
 Both derive from survey-core alone. **The schema constrains and verifies; the guide teaches.**
