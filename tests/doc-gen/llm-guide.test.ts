@@ -236,6 +236,14 @@ describe("the emitted files", () => {
     expect(text).toContain("https://unpkg.com/survey-core@" + facts.version + "/surveyjs_definition.json");
   });
 
+  itCore("the API reference links point at the Markdown page, not the HTML", () => {
+    // e.g. .../api-reference/surveymodel.md -- the .md the model fetches, per the release.
+    expect(text).toContain("[API](https://surveyjs.io/form-library/documentation/api-reference/surveymodel.md)");
+    const apiLinks = text.match(/\[API\]\((https:\/\/surveyjs\.io\/[^)]+)\)/g) || [];
+    expect(apiLinks.length).toBeGreaterThan(0);
+    apiLinks.forEach((link) => expect(link).toMatch(/\.md\)$/));
+  });
+
   itCore("llms.txt points at both artifacts", () => {
     const llms = guide.files[path.join(process.cwd(), "docs", "llms.txt")];
     expect(llms).toContain("authoring guide");

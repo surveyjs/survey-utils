@@ -283,7 +283,8 @@ function addClass(
   if (cls.tsName) {
     // Class-level links only, and a demo only for the types someone actually authors:
     // ~60 links is noise-level cost, one per property would be 6-10k tokens.
-    const links = ["[API](" + sourceUrl(product, cls.tsName, baseUrl) + ")"];
+    // `.md` so the link resolves to the Markdown page a model fetches, not the rendered HTML.
+    const links = ["[API](" + sourceUrl(product, cls.tsName, baseUrl) + ".md)"];
     if (facts.kinds[cls.name] === "type") {
       cls.demos.slice(0, 1).forEach((url) => links.push("[Demo](" + url + ")"));
     }
