@@ -105,6 +105,7 @@ function addIndexSection(
       count: members.filter((p) => p.className === cls.name && isVisibleMember(p)).length
     }))
     .sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name));
+  if (entries.length === 0) return;
   lines.push("", "## " + title, "");
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];

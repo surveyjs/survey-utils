@@ -569,6 +569,17 @@ describe("generateMDFiles", () => {
       expect(sentence).not.toContain("https://");
     });
 
+    test("a section header is omitted when it has no entries", () => {
+      // Only classes, no interfaces or variables.
+      const classesOnly = [
+        { name: "OnlyClass", entryType: 1, documentation: "The only class." }
+      ];
+      const out = generateIndexMD(classesOnly as any, []);
+      expect(out).toContain("## Classes");
+      expect(out).not.toContain("## Interfaces");
+      expect(out).not.toContain("## Variables");
+    });
+
     test("generateMDFiles writes an index.md alongside the class files", () => {
       const docs = runDocGenerator("smoke");
       const files = runMDGenerator(docs.classes, docs.pmes);
