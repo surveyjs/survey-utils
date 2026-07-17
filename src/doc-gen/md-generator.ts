@@ -267,14 +267,15 @@ function unionTypeString(group: DocEntry[], toType: (member: DocEntry) => string
 }
 
 /**
- * Builds the `**Since:** <version>` line from the entry's `@since` tag, or an
- * empty string when the entry carries no `@since`. Used for both classes and
- * members.
+ * Builds the `Available since: v<version>` line from the entry's `@since` tag,
+ * or an empty string when the entry carries no `@since`. A leading `v` already
+ * present in the tag is not duplicated. Used for both classes and members.
  */
 function sinceLine(entry: DocEntry): string {
-  const since = oneLine(entry.since).trim();
+  let since = oneLine(entry.since).trim();
   if (!since) return "";
-  return "**Since:** " + since;
+  since = since.replace(/^v/i, "");
+  return "Available since: v" + since;
 }
 
 /**
