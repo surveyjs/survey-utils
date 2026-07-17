@@ -371,6 +371,59 @@ describe("generateMDFiles", () => {
     });
   });
 
+  describe("since (@since tags)", () => {
+    const classes = [{
+      name: "Sample", entryType: 1, documentation: "A sample class.", since: "1.9.0"
+    }];
+
+    test("a class with @since renders a Since line after its description", () => {
+      const md = runMDGenerator(classes as any, [])["Sample.md"];
+      expect(md).toContain("**Since:** 1.9.0");
+      expect(md.indexOf("A sample class.")).toBeLessThan(md.indexOf("**Since:** 1.9.0"));
+    });
+
+    test("a class without @since has no Since line", () => {
+      const bare = [{ name: "Sample", entryType: 1, documentation: "A sample class." }];
+      expect(runMDGenerator(bare as any, [])["Sample.md"]).not.toContain("**Since:**");
+    });
+
+    test("a property with @since renders a Since line after its description", () => {
+      const pmes = [{
+        className: "Sample", name: "isVisible", pmeType: "property", type: "boolean",
+        documentation: "Specifies the visibility.", since: "1.9.100"
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("**Since:** 1.9.100");
+      expect(md.indexOf("Specifies the visibility.")).toBeLessThan(md.indexOf("**Since:** 1.9.100"));
+    });
+
+    test("a method with @since renders its Since line before the parameters table", () => {
+      const pmes = [{
+        className: "Sample", name: "greet", pmeType: "method", returnType: "string",
+        documentation: "Greets someone.", since: "2.0.0",
+        parameters: [{ name: "who", type: "string", documentation: "A person name." }]
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md.indexOf("**Since:** 2.0.0")).toBeLessThan(md.indexOf("**Parameters:**"));
+    });
+
+    test("an event with @since renders a Since line", () => {
+      const pmes = [{
+        className: "Sample", name: "onComplete", pmeType: "event",
+        documentation: "An event raised on complete.", since: "3.1.0"
+      }];
+      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      expect(md).toContain("**Since:** 3.1.0");
+    });
+
+    test("the tags fixture renders the @since of the class and its member", () => {
+      const docs = runDocGenerator("tags");
+      const md = runMDGenerator(docs.classes, docs.pmes)["ElementBase.md"];
+      expect(md).toContain("**Since:** 1.9.0");
+      expect(md).toContain("**Since:** 1.9.100");
+    });
+  });
+
   describe("events (events fixture)", () => {
     test("events are rendered under an Events section with their documentation", () => {
       const docs = runDocGenerator("events");

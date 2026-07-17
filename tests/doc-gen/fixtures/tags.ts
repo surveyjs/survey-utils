@@ -2,6 +2,7 @@
  * The base element.
  * @title Base Element
  * @description The base element meta description.
+ * @since 1.9.0
  */
 export class ElementBase {
   /**
@@ -25,6 +26,11 @@ export class ElementBase {
    * @see widthValue
    */
   public name: string = "";
+  /**
+   * Specifies the visibility.
+   * @since 1.9.100
+   */
+  public isVisible: boolean = true;
 }
 /**
  * A text element.

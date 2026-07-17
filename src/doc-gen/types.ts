@@ -11,6 +11,7 @@ export interface DocEntry {
   metaDescription?: string;
   isDeprecated?: boolean;
   deprecationInfo?: string;
+  since?: string;
   see?: any;
   type?: string;
   baseType?: string;

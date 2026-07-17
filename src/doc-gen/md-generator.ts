@@ -143,6 +143,8 @@ export function generateMDForClass(
   parts.push("# `" + cls.name + "`");
   const description = (cls.documentation || "").trim();
   if (description) parts.push(description);
+  const since = sinceLine(cls);
+  if (since) parts.push(since);
   const inheritance = inheritanceSection(cls, product, sourceBaseUrl);
   if (inheritance) parts.push(inheritance);
   if (properties.length > 0) parts.push(propertiesSection(properties));
@@ -191,6 +193,8 @@ function propertiesSection(properties: DocEntry[]): string {
     lines.push("**Type**: `" + unionTypeString(group, (p) => typeString(p.type, p.returnTypeGenerics)) + "`");
     const doc = (prop.documentation || "").trim();
     if (doc) lines.push(doc);
+    const since = sinceLine(prop);
+    if (since) lines.push(since);
     addRelatedAPIs(lines, prop);
     return lines.join("\n\n");
   });
@@ -206,6 +210,8 @@ function methodsSection(methods: DocEntry[]): string {
     if (returnValue) lines.push(returnValue);
     const doc = (method.documentation || "").trim();
     if (doc) lines.push(doc);
+    const since = sinceLine(method);
+    if (since) lines.push(since);
     const table = parametersTable(<DocEntry[]>method.parameters);
     if (table) lines.push("**Parameters:**\n\n" + table);
     addRelatedAPIs(lines, method);
@@ -220,6 +226,8 @@ function eventsSection(events: DocEntry[]): string {
     const lines = ["### `" + event.name + "`"];
     const doc = (event.documentation || "").trim();
     if (doc) lines.push(doc);
+    const since = sinceLine(event);
+    if (since) lines.push(since);
     addRelatedAPIs(lines, event);
     return lines.join("\n\n");
   });
@@ -256,6 +264,17 @@ function unionTypeString(group: DocEntry[], toType: (member: DocEntry) => string
     if (type && types.indexOf(type) < 0) types.push(type);
   }
   return types.join(" | ");
+}
+
+/**
+ * Builds the `**Since:** <version>` line from the entry's `@since` tag, or an
+ * empty string when the entry carries no `@since`. Used for both classes and
+ * members.
+ */
+function sinceLine(entry: DocEntry): string {
+  const since = oneLine(entry.since).trim();
+  if (!since) return "";
+  return "**Since:** " + since;
 }
 
 /**

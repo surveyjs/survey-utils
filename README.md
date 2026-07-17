@@ -679,7 +679,7 @@ quietly wrong doc model. Both are isolated in [ts-compat.ts](src/doc-gen/ts-comp
   model. Use `ts.canHaveDecorators` / `ts.getDecorators`.
 - **`JSDocTagInfo.text` became `SymbolDisplayPart[]` in 4.3.** Assigning it straight into a
   `DocEntry` would put an array of parts where the JSON expects a string, corrupting `@title`,
-  `@description`, `@deprecated`, `@see`, `@returns` and `@hidefor`.
+  `@description`, `@deprecated`, `@see`, `@returns`, `@since` and `@hidefor`.
 
 `tests/doc-gen/members.test.ts` and `tags.test.ts` guard both.
 

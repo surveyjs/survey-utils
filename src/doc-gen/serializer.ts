@@ -68,6 +68,12 @@ export function serializeSymbol(ctx: GenerationContext, symbol: ts.Symbol): DocE
           res.deprecationInfo = text;
         }
       }
+      if (jsTags[i].name == "since") {
+        const since = !!tagText ? tagText.trim() : "";
+        if (!!since) {
+          res.since = since;
+        }
+      }
       if (jsTags[i].name == "see") {
         seeArray.push(<string>tagText);
       }

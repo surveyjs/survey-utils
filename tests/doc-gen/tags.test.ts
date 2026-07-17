@@ -41,6 +41,14 @@ describe("jsdoc tags", () => {
     expect(prop.deprecationInfo).toBe("Obsolete. Use the width property instead.");
   });
 
+  test("@since sets the since field on a class", () => {
+    expect(docs.findClass("ElementBase").since).toBe("1.9.0");
+  });
+
+  test("@since sets the since field on a member", () => {
+    expect(docs.findPME("ElementBase", "isVisible").since).toBe("1.9.100");
+  });
+
   test("@see tags are collected", () => {
     // TypeScript includes the next jsdoc line's "*" in the tag text when @see is
     // not the last line of the comment -- still true on 5.8, which is why
