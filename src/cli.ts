@@ -47,8 +47,9 @@ its own package.json needs no --path.
 
 survey-utils generate-doc <preset> [--path <dir>] [--out <dir>]
 
-  Presets bundle a fixed set of emitters for the Form Library, so a release script names one
-  instead of listing flags. They take only --path and --out; every other option is ignored.
+  Presets bundle a fixed set of emitters for a product -- the Form Library or Survey Creator --
+  so a release script names one instead of listing flags. They take only --path and --out; every
+  other option is ignored.
 
   library-build             The artifacts shipped inside the survey-core npm package:
                             llms.txt (copied from survey-utils' static/llms.txt) and
@@ -57,6 +58,11 @@ survey-utils generate-doc <preset> [--path <dir>] [--out <dir>]
   library-site              The artifacts the website serves: classes.json, pmes.json and
                             surveyjs_definition.json in <out>, survey-json-authoring.md in
                             <out>/llms, and the Markdown API reference in <out>/api-reference.
+  creator-build             Nothing: Survey Creator ships no generated doc artifacts in its
+                            package, so this preset is a no-op kept for symmetry with the others.
+  creator-site             The artifacts the website serves for Survey Creator: classes.json and
+                            pmes.json in <out>, and the Markdown API reference in <out>/api-reference.
+                            Creator has no built bundle, so there is no schema or LLM guide.
 
 survey-utils generate-doc [product] [options]
 
@@ -336,16 +342,27 @@ function loadDocBundle(args: DocArgs, root: string): SurveyBundle | null {
 }
 
 /**
- * The presets: `generate-doc library-build` and `generate-doc library-site`. Each is a named
- * bundle of emitters for the Form Library -- a release step names the preset instead of spelling
- * out the flags, so the set of artifacts a build or a site publish produces lives here, in one
- * place, rather than in a script that could drift from it.
+ * The presets: `generate-doc <product>-build` and `generate-doc <product>-site`, for the Form
+ * Library and for Survey Creator. Each is a named bundle of emitters -- a release step names the
+ * preset instead of spelling out the flags, so the set of artifacts a build or a site publish
+ * produces lives here, in one place, rather than in a script that could drift from it.
+ *
+ * Library and Creator diverge because Creator has no built bundle: its docs are AST/JSDoc only,
+ * so the schema and the LLM guide -- both generated from survey-core's Serializer -- have no
+ * place in a Creator preset. creator-build has nothing to ship and does nothing; creator-site
+ * emits only classes.json, pmes.json and the Markdown API reference.
  */
-const PRESETS = ["library-build", "library-site"] as const;
+const PRESETS = ["library-build", "library-site", "creator-build", "creator-site"] as const;
 type Preset = (typeof PRESETS)[number];
 
 function isPreset(name: string): name is Preset {
   return (PRESETS as readonly string[]).indexOf(name) >= 0;
+}
+
+/** A preset's product and mode, split from its name: 'creator-site' -> ['creator', 'site']. */
+function presetParts(preset: Preset): { product: string; mode: "build" | "site" } {
+  const dash = preset.indexOf("-");
+  return { product: preset.substring(0, dash), mode: preset.substring(dash + 1) as "build" | "site" };
 }
 
 interface PresetArgs {
@@ -379,20 +396,32 @@ function staticLlmsTxt(): string {
 }
 
 function runPreset(preset: Preset, args: PresetArgs): number {
-  const product = SERIALIZER_PRODUCT; // both presets document the Form Library (survey-core).
+  const { product, mode } = presetParts(preset);
   const root = docRoot(product, args.path);
-  const at = (target: string): string => path.resolve(root, target);
+  const out = path.resolve(root, !!args.out ? args.out : docOut(product, root));
   const entries = docEntries(product, root);
-  const out = at(!!args.out ? args.out : docOut(product, root));
   const docProduct = docProducts[product].docProduct;
   console.log(
     `${preset}: ${entries.map((entry) => path.relative(root, entry)).join(", ")} (under ${root}, out ${out})`
   );
 
-  // Both presets emit the schema and the guide, and both come from the built bundle -- so it is
-  // required here, and loadDocBundle reports where it looked when there is nothing built.
+  return product === SERIALIZER_PRODUCT
+    ? runLibraryPreset(mode, args, root, entries, out, docProduct)
+    : runCreatorPreset(mode, entries, out, docProduct, root);
+}
+
+/**
+ * The Form Library presets. Both emit the schema and the LLM guide -- both generated from
+ * survey-core's built bundle, so it is required here, and loadDocBundle reports where it looked
+ * when there is nothing built. build then copies survey-utils' static llms.txt; site adds
+ * classes.json, pmes.json and the Markdown API reference.
+ */
+function runLibraryPreset(
+  mode: "build" | "site", args: PresetArgs, root: string, entries: string[], out: string,
+  docProduct: string
+): number {
   const bundle = loadDocBundle(
-    { ...emptyDocArgs(), product, path: args.path, jsonDefinition: "runtime", llmGuide: true },
+    { ...emptyDocArgs(), product: SERIALIZER_PRODUCT, path: args.path, jsonDefinition: "runtime", llmGuide: true },
     root
   );
   if (!bundle) return 1; // loadDocBundle throws when a needed bundle is missing; guard for the type.
@@ -425,7 +454,7 @@ function runPreset(preset: Preset, args: PresetArgs): number {
   );
   guide.warnings.forEach((warning) => console.warn("warning: " + warning));
 
-  if (preset === "library-build") {
+  if (mode === "build") {
     // llms.txt in the out root, copied from survey-utils' own static file.
     files[path.join(resolveDir(out), "llms.txt")] = staticLlmsTxt();
   } else {
@@ -437,6 +466,36 @@ function runPreset(preset: Preset, args: PresetArgs): number {
       outputDir: path.join(out, "api-reference")
     }));
   }
+
+  const written = writeFiles(files);
+  console.log(`${written.length} file(s) written.`);
+  return 0;
+}
+
+/**
+ * The Survey Creator presets. Creator has no built bundle, so there is no schema and no LLM guide
+ * to emit -- the docs are AST/JSDoc only. creator-build has nothing to ship and does nothing;
+ * creator-site emits classes.json and pmes.json in the out root and the Markdown API reference in
+ * <out>/api-reference.
+ */
+function runCreatorPreset(
+  mode: "build" | "site", entries: string[], out: string, docProduct: string, root: string
+): number {
+  if (mode === "build") {
+    console.log("creator-build: nothing to build.");
+    return 0;
+  }
+
+  const model = buildModel(entries, { target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS }, root);
+  if (!model) return 1;
+
+  const files: FileMap = {};
+  Object.assign(files, buildDocModelJSON(model, out));
+  Object.assign(files, buildMDFiles(model.classes, model.pmes, {
+    product: docProduct,
+    fileNames: entries,
+    outputDir: path.join(out, "api-reference")
+  }));
 
   const written = writeFiles(files);
   console.log(`${written.length} file(s) written.`);
