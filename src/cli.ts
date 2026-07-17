@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import * as ts from "typescript";
 import * as path from "path";
+import * as fs from "fs";
 import {
   buildModel, buildDocModelJSON, buildJSONDefinitionAST, buildMDFiles, buildLLMGuide,
   buildJSONDefinitionRuntime, loadBundle, findBundle, SurveyBundle, setJsonObj, diffFiles,
@@ -43,6 +44,19 @@ folder inside it. Without --path they look the repo up next to survey-utils (a l
 checkout, where survey-utils sits beside survey-library, survey-creator, survey-analytics),
 except that generate-doc uses the working directory first, so a product calling the bin from
 its own package.json needs no --path.
+
+survey-utils generate-doc <preset> [--path <dir>] [--out <dir>]
+
+  Presets bundle a fixed set of emitters for the Form Library, so a release script names one
+  instead of listing flags. They take only --path and --out; every other option is ignored.
+
+  library-build             The artifacts shipped inside the survey-core npm package:
+                            llms.txt (copied from survey-utils' static/llms.txt) and
+                            surveyjs_definition.json in <out>, and survey-json-authoring.md
+                            in <out>/llms.
+  library-site              The artifacts the website serves: classes.json, pmes.json and
+                            surveyjs_definition.json in <out>, survey-json-authoring.md in
+                            <out>/llms, and the Markdown API reference in <out>/api-reference.
 
 survey-utils generate-doc [product] [options]
 
@@ -321,6 +335,122 @@ function loadDocBundle(args: DocArgs, root: string): SurveyBundle | null {
   );
 }
 
+/**
+ * The presets: `generate-doc library-build` and `generate-doc library-site`. Each is a named
+ * bundle of emitters for the Form Library -- a release step names the preset instead of spelling
+ * out the flags, so the set of artifacts a build or a site publish produces lives here, in one
+ * place, rather than in a script that could drift from it.
+ */
+const PRESETS = ["library-build", "library-site"] as const;
+type Preset = (typeof PRESETS)[number];
+
+function isPreset(name: string): name is Preset {
+  return (PRESETS as readonly string[]).indexOf(name) >= 0;
+}
+
+interface PresetArgs {
+  path?: string;
+  out?: string;
+}
+
+/**
+ * A preset takes only --path and --out; every other token is ignored, as documented. The set of
+ * artifacts is fixed by the preset, so there is nothing else for the caller to select, and a
+ * stray flag left over from a full generate-doc invocation is silently harmless rather than fatal.
+ */
+function parsePresetArgs(args: string[]): PresetArgs {
+  const res: PresetArgs = {};
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--path" || arg === "--out") {
+      const next = args[++i];
+      if (next === undefined || next.indexOf("--") === 0) throw new UsageError(arg + " needs a value");
+      if (arg === "--path") res.path = next;
+      else res.out = next;
+    }
+    // Everything else is ignored on purpose: the preset decides the emitters.
+  }
+  return res;
+}
+
+/** survey-utils' own static/llms.txt, shipped in the package beside dist/. */
+function staticLlmsTxt(): string {
+  return fs.readFileSync(path.join(__dirname, "..", "static", "llms.txt"), "utf8");
+}
+
+function runPreset(preset: Preset, args: PresetArgs): number {
+  const product = SERIALIZER_PRODUCT; // both presets document the Form Library (survey-core).
+  const root = docRoot(product, args.path);
+  const at = (target: string): string => path.resolve(root, target);
+  const entries = docEntries(product, root);
+  const out = at(!!args.out ? args.out : docOut(product, root));
+  const docProduct = docProducts[product].docProduct;
+  console.log(
+    `${preset}: ${entries.map((entry) => path.relative(root, entry)).join(", ")} (under ${root}, out ${out})`
+  );
+
+  // Both presets emit the schema and the guide, and both come from the built bundle -- so it is
+  // required here, and loadDocBundle reports where it looked when there is nothing built.
+  const bundle = loadDocBundle(
+    { ...emptyDocArgs(), product, path: args.path, jsonDefinition: "runtime", llmGuide: true },
+    root
+  );
+  if (!bundle) return 1; // loadDocBundle throws when a needed bundle is missing; guard for the type.
+  const serializer = bundle.Serializer;
+  setJsonObj(serializer);
+  const model = buildModel(entries, { target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS }, root);
+  if (!model) return 1;
+
+  const files: FileMap = {};
+
+  // surveyjs_definition.json in the out root -- both presets.
+  files[path.join(resolveDir(out), "surveyjs_definition.json")] = buildJSONDefinitionRuntime(serializer);
+
+  // survey-json-authoring.md in <out>/llms -- both presets. buildLLMGuide also emits llms.txt into
+  // outputDir, but the presets manage llms.txt themselves (build copies the static one, site omits
+  // it), so only the guide file is kept.
+  const guide = buildLLMGuide(model, <any>bundle, {
+    outputDir: out,
+    guideOutputDir: path.join(out, "llms"),
+    fileNames: entries,
+    product: docProduct
+  });
+  Object.keys(guide.files).forEach((file) => {
+    if (path.basename(file) === "llms.txt") return;
+    files[file] = guide.files[file];
+  });
+  console.log(
+    `LLM guide: ${(guide.bytes / 1024).toFixed(1)} KB, ~${guide.approxTokens} tokens; `
+    + `${guide.facts.documented} documented properties, ${guide.facts.undocumented} without JSDoc.`
+  );
+  guide.warnings.forEach((warning) => console.warn("warning: " + warning));
+
+  if (preset === "library-build") {
+    // llms.txt in the out root, copied from survey-utils' own static file.
+    files[path.join(resolveDir(out), "llms.txt")] = staticLlmsTxt();
+  } else {
+    // library-site: classes.json + pmes.json in the out root, and the Markdown API reference.
+    Object.assign(files, buildDocModelJSON(model, out));
+    Object.assign(files, buildMDFiles(model.classes, model.pmes, {
+      product: docProduct,
+      fileNames: entries,
+      outputDir: path.join(out, "api-reference")
+    }));
+  }
+
+  const written = writeFiles(files);
+  console.log(`${written.length} file(s) written.`);
+  return 0;
+}
+
+/** The DocArgs defaults, so a preset can hand loadDocBundle a well-formed value. */
+function emptyDocArgs(): DocArgs {
+  return {
+    product: SERIALIZER_PRODUCT, entries: [], md: false, json: false, llmGuide: false,
+    split: false, withMemberLinks: false, check: false
+  };
+}
+
 function generateDoc(args: DocArgs): number {
   // The product's repo: --path, the working directory when the entries are already under it,
   // or the sibling checkout. Every relative path the caller passed resolves against it.
@@ -409,7 +539,11 @@ function main(): void {
   }
   try {
     if (command === "generate-doc") {
-      process.exit(generateDoc(parseDocArgs(argv.slice(1))));
+      const rest = argv.slice(1);
+      if (isPreset(rest[0])) {
+        process.exit(runPreset(rest[0], parsePresetArgs(rest.slice(1))));
+      }
+      process.exit(generateDoc(parseDocArgs(rest)));
     }
     if (command === "check-strings") {
       process.exit(runCheckUnusedStrings(argv.slice(1)));
