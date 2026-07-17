@@ -261,8 +261,9 @@ release and a missing one aborts the check with an explanatory message.
     "doc_gen": "survey-utils generate-doc library --md --json-definition",
 
     // The LLM authoring guide, alongside the schema. Both come from the built bundle, and both
-    // are survey-core's, so neither needs the product named.
-    "llm_guide": "survey-utils generate-doc --llm-guide --json-definition",
+    // are survey-core's, so neither needs the product named. --llm-guide-out puts
+    // survey-json-authoring.md under ./llms while the schema stays in ./docs.
+    "llm_guide": "survey-utils generate-doc --llm-guide --json-definition --llm-guide-out llms",
 
     // CI: regenerate in memory, diff against disk, exit 1 when someone changed survey-core
     // and did not regenerate. Output is deterministic, so two runs are byte-identical.
@@ -531,7 +532,7 @@ entries are relative to, so the same name works from the repo root and from the 
 | `--json` | The raw doc model: `classes.json` + `pmes.json` |
 | `--json-definition` | `surveyjs_definition.json` from **`Serializer.generateSchema()`** — needs survey-core **built** |
 | `--json-definition=ast` | `surveyjs_definition.json` derived from the **AST** — a different, larger document (see below), from the sources alone |
-| `--llm-guide` | `llm-guide.md`, the authoring guide an LLM is given as context — needs survey-core **built**. Also emits `llms.txt` |
+| `--llm-guide` | `survey-json-authoring.md`, the authoring guide an LLM is given as context — needs survey-core **built**. Also emits `llms.txt` |
 
 They are independently selectable: the model is built once and fanned out to whichever emitters
 were asked for. At least one is required — unlike the old generator, there is no implicit default,
@@ -550,6 +551,11 @@ report the bundle they wanted and exit **2** rather than generate half a documen
 `--out <dir>` defaults to the docs folder of the package the product is documented from — the
 `Default out` column above — so a run from the repo root and a run from the package itself write
 the same folder; `--check` diffs against disk instead of writing.
+
+`--llm-guide-out <dir>` writes `survey-json-authoring.md` somewhere other than `--out`, resolved
+against `--path` the same way — the guide belongs under `survey-core/llms` while the API docs and
+the schema stay in `docs`. Only the guide file moves; the per-type `--split` files and `llms.txt`
+stay in `--out`. It only applies alongside `--llm-guide`.
 
 **Which emitters need the product.** `--md` and `--json` document one product's API, so the run has
 to say which — omit it and the command exits `2` listing the four. `--json-definition` and
@@ -592,9 +598,11 @@ Every fact in both files is extracted at generation time. There are **no hand-ma
 of types, properties, descriptions, operators or examples: those rot the moment survey-core
 changes, and a stale guide teaches a model to write JSON that no longer loads. The only fixed
 prose is a ~10-line block of output rules, in one constant in
-[llm-guide.ts](src/doc-gen/llm-guide.ts). Every JSON snippet is built through the library's own
-API, serialized with `toJSON()`, then validated, loaded with `new SurveyModel(json)` and
-re-serialized — a snippet that fails is never emitted.
+[llm-guide.ts](src/doc-gen/llm-guide.ts); the guide also points the model at the schema for its
+own copy of survey-core (`unpkg.com/survey-core@<version>`, pinned to the generated version) so it
+can self-check what it writes. Every JSON snippet is built through the library's own API,
+serialized with `toJSON()`, then validated, loaded with `new SurveyModel(json)` and re-serialized
+— a snippet that fails is never emitted.
 
 ### Three things worth knowing
 

@@ -18,6 +18,13 @@ import { buildExamples, createChecker, Example, ExampleSet } from "./examples";
 
 export interface LLMGuideOptions {
   outputDir?: string;
+  /**
+   * Where `survey-json-authoring.md` is written, when it must not sit in `outputDir` with the
+   * other artifacts -- e.g. the guide goes to `survey-core/llms` while the API docs go to
+   * `survey-core/docs`. Falls back to `outputDir`. Only the guide file moves; the split files
+   * and `llms.txt` stay in `outputDir`.
+   */
+  guideOutputDir?: string;
   fileNames?: string[];
   product?: string;
   sourceBaseUrl?: string;
@@ -55,11 +62,23 @@ const OUTPUT_RULES = [
   "- No Markdown fences, no prose before or after, no comments, no trailing commas.",
   "- Omit any property whose value equals the default listed in this guide.",
   "- Use only the `type` strings listed under \"Question types\". There are no others.",
+  "- Use only property names this guide lists for a type; never invent one.",
+  "- Use enum values exactly as they appear here.",
+  "- Put an expression only where a property is documented to accept one.",
   "- Give every question a `name` that is unique in the document; it is the key in the result data.",
   "- An expression may only reference the `name` of a question that exists in the document."
 ].join("\n");
 
+/** The published, version-pinned copy of the schema `--json-definition` emits. */
+function schemaUrl(facts: SurveyFacts): string {
+  return "https://unpkg.com/survey-core@" + facts.version + "/surveyjs_definition.json";
+}
+
 const BYTES_PER_TOKEN = 3.6;
+
+/** The guide's file name and the sub-directory the per-type split files go in. */
+const GUIDE_FILE = "survey-json-authoring.md";
+const GUIDE_DIR = "survey-json-authoring";
 
 /**
  * The size gate. It exists to catch the guide growing without anyone noticing, not to be
@@ -87,9 +106,11 @@ export function buildLLMGuide(
   const baseUrl = options.sourceBaseUrl;
   const outputDir = resolveDir(options.outputDir || path.join(process.cwd(), "docs"));
 
+  const guideDir = options.guideOutputDir ? resolveDir(options.guideOutputDir) : outputDir;
+
   const guide = renderGuide(facts, examples, product, baseUrl);
   const files: FileMap = {};
-  files[path.join(outputDir, "llm-guide.md")] = guide;
+  files[path.join(guideDir, GUIDE_FILE)] = guide;
   if (options.split) {
     Object.assign(files, renderSplit(facts, examples, product, baseUrl, outputDir, options));
   }
@@ -129,6 +150,13 @@ function renderGuide(
   add("## Output rules");
   add("");
   add(OUTPUT_RULES);
+  add("");
+  add(
+    "Before returning the JSON, check it against the survey definition schema and fix "
+    + "anything it rejects: " + schemaUrl(facts) + ". The schema catches unknown properties "
+    + "and malformed values; it does not catch every unknown question type, so still keep to "
+    + "the types listed below."
+  );
   add("");
 
   add("## The shape of a survey");
@@ -386,7 +414,7 @@ function renderSplit(
         });
         add("");
       }
-      files[path.join(outputDir, "llm-guide", cls.name + ".md")] =
+      files[path.join(outputDir, GUIDE_DIR, cls.name + ".md")] =
         out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "") + "\n";
     });
   return files;
@@ -399,8 +427,8 @@ function renderSplit(
  * check its own output against it instead of only being told the rules.
  */
 function renderLlmsTxt(facts: SurveyFacts, options: LLMGuideOptions): string {
-  const guideUrl = options.guideUrl || "https://surveyjs.io/llms/llm-guide.md";
-  const schemaUrl = options.schemaUrl || "https://surveyjs.io/llms/surveyjs_definition.json";
+  const guideUrl = options.guideUrl || "https://surveyjs.io/llms/" + GUIDE_FILE;
+  const schema = options.schemaUrl || schemaUrl(facts);
   return [
     "## Survey JSON",
     "",
@@ -408,7 +436,7 @@ function renderLlmsTxt(facts: SurveyFacts, options: LLMGuideOptions): string {
     "",
     "- [Survey JSON authoring guide](" + guideUrl + "): every question type, property, "
     + "operator and function, with worked examples. Written to be given to a model as context.",
-    "- [Survey JSON Schema](" + schemaUrl + "): the JSON Schema of a survey definition. "
+    "- [Survey JSON Schema](" + schema + "): the JSON Schema of a survey definition. "
     + "Validate generated JSON against it.",
     ""
   ].join("\n");

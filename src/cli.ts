@@ -82,6 +82,10 @@ ${EMITTERS}
   --split                   Also emit one file per question type into <out>/llm-guide/.
   --with-member-links       Member-level API links in the split files. Off by default: ~400
                             links cost 6-10k tokens, and only a reader that can fetch them pays off.
+  --llm-guide-out <dir>     Write survey-json-authoring.md here instead of <out>, resolved against
+                            --path -- e.g. the guide to survey-core/llms while --md and the schema
+                            stay under <out>. Only the guide file moves; the split files and
+                            llms.txt stay in <out>.
 
   --out <dir>               Output root, resolved against --path. Default: the docs folder of the
                             package the product is documented from -- library writes
@@ -128,6 +132,8 @@ interface DocArgs {
   sourceBaseUrl?: string;
   /** --out. Absent: the docs folder of the package the product is documented from, see docOut(). */
   out?: string;
+  /** --llm-guide-out: where survey-json-authoring.md goes when it must not sit in --out. */
+  guideOut?: string;
   check: boolean;
 }
 
@@ -213,6 +219,8 @@ function parseDocArgs(args: string[]): DocArgs {
       res.sourceBaseUrl = value();
     } else if (arg === "--out") {
       res.out = value();
+    } else if (arg === "--llm-guide-out") {
+      res.guideOut = value();
     } else if (arg === "--check") {
       res.check = true;
     } else {
@@ -252,6 +260,9 @@ function parseDocArgs(args: string[]): DocArgs {
   }
   if ((res.split || res.withMemberLinks) && !res.llmGuide) {
     throw new UsageError("--split and --with-member-links only apply to --llm-guide.");
+  }
+  if (!!res.guideOut && !res.llmGuide) {
+    throw new UsageError("--llm-guide-out only applies to --llm-guide.");
   }
   return res;
 }
@@ -357,6 +368,7 @@ function generateDoc(args: DocArgs): number {
     if (args.llmGuide) {
       const guide = buildLLMGuide(model, <any>bundle, {
         outputDir: out,
+        guideOutputDir: !!args.guideOut ? at(args.guideOut) : undefined,
         fileNames: entries,
         product: docProduct,
         sourceBaseUrl: args.sourceBaseUrl,

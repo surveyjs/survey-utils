@@ -35,7 +35,7 @@ beforeAll(() => {
   }
   facts = buildFacts(model, bundle);
   guide = buildLLMGuide(model, bundle, { outputDir: "docs" });
-  text = guide.files[path.join(process.cwd(), "docs", "llm-guide.md")];
+  text = guide.files[path.join(process.cwd(), "docs", "survey-json-authoring.md")];
 });
 
 describe("the facts come from survey-core, not from a table", () => {
@@ -229,6 +229,13 @@ describe("the emitted files", () => {
     expect(() => buildLLMGuide(model, bundle, { maxBytes: 1024 })).toThrow(/over the/);
   });
 
+  itCore("the output rules ban invented names and point at the version-pinned schema", () => {
+    expect(text).toContain("never invent one");
+    expect(text).toContain("Use enum values exactly");
+    // The self-check URL is pinned to the survey-core the guide was generated from.
+    expect(text).toContain("https://unpkg.com/survey-core@" + facts.version + "/surveyjs_definition.json");
+  });
+
   itCore("llms.txt points at both artifacts", () => {
     const llms = guide.files[path.join(process.cwd(), "docs", "llms.txt")];
     expect(llms).toContain("authoring guide");
@@ -238,7 +245,7 @@ describe("the emitted files", () => {
 
   itCore("--split emits one file per question type, and member links only when asked", () => {
     const split = buildLLMGuide(model, bundle, { outputDir: "docs", split: true });
-    const textFile = path.join(process.cwd(), "docs", "llm-guide", "text.md");
+    const textFile = path.join(process.cwd(), "docs", "survey-json-authoring", "text.md");
     expect(Object.keys(split.files)).toContain(textFile);
     expect(split.files[textFile]).not.toContain("#placeholder");
 
@@ -246,6 +253,24 @@ describe("the emitted files", () => {
       outputDir: "docs", split: true, withMemberLinks: true
     });
     expect(linked.files[textFile]).toContain("#placeholder");
+  });
+
+  itCore("guideOutputDir moves only the guide file; split and llms.txt stay in outputDir", () => {
+    const moved = buildLLMGuide(model, bundle, {
+      outputDir: "docs", guideOutputDir: "llms", split: true
+    });
+    const keys = Object.keys(moved.files);
+    // The guide file lands under the override, not under outputDir.
+    expect(keys).toContain(path.join(process.cwd(), "llms", "survey-json-authoring.md"));
+    expect(keys).not.toContain(path.join(process.cwd(), "docs", "survey-json-authoring.md"));
+    // Its companions do not move.
+    expect(keys).toContain(path.join(process.cwd(), "docs", "llms.txt"));
+    expect(keys).toContain(path.join(process.cwd(), "docs", "survey-json-authoring", "text.md"));
+  });
+
+  itCore("without guideOutputDir the guide stays in outputDir", () => {
+    const keys = Object.keys(guide.files);
+    expect(keys).toContain(path.join(process.cwd(), "docs", "survey-json-authoring.md"));
   });
 
   itCore("two runs are byte-identical -- --check depends on it", () => {
