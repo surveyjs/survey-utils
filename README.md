@@ -261,9 +261,9 @@ release and a missing one aborts the check with an explanatory message.
     "doc_gen": "survey-utils generate-doc library --md --json-definition",
 
     // The LLM authoring guide, alongside the schema. Both come from the built bundle, and both
-    // are survey-core's, so neither needs the product named. --llm-guide-out puts
-    // survey-json-authoring.md under ./llms while the schema stays in ./docs.
-    "llm_guide": "survey-utils generate-doc --llm-guide --json-definition --llm-guide-out llms",
+    // are survey-core's, so neither needs the product named. survey-json-authoring.md defaults
+    // to ./llms while the schema stays in ./docs; --llm-guide-out overrides that location.
+    "llm_guide": "survey-utils generate-doc --llm-guide --json-definition",
 
     // CI: regenerate in memory, diff against disk, exit 1 when someone changed survey-core
     // and did not regenerate. Output is deterministic, so two runs are byte-identical.
@@ -552,10 +552,10 @@ report the bundle they wanted and exit **2** rather than generate half a documen
 `Default out` column above — so a run from the repo root and a run from the package itself write
 the same folder; `--check` diffs against disk instead of writing.
 
-`--llm-guide-out <dir>` writes `survey-json-authoring.md` somewhere other than `--out`, resolved
-against `--path` the same way — the guide belongs under `survey-core/llms` while the API docs and
-the schema stay in `docs`. Only the guide file moves; the per-type `--split` files and `llms.txt`
-stay in `--out`. It only applies alongside `--llm-guide`.
+`--llm-guide-out <dir>` sets where `survey-json-authoring.md` is written, resolved against `--path`
+the same way as `--out`. It defaults to `llms` — the guide belongs under `survey-core/llms` while
+the API docs and the schema stay in `docs`. Only the guide file moves; the per-type `--split` files
+and `llms.txt` stay in `--out`. It only applies alongside `--llm-guide`.
 
 **Which emitters need the product.** `--md` and `--json` document one product's API, so the run has
 to say which — omit it and the command exits `2` listing the four. `--json-definition` and
@@ -574,6 +574,38 @@ survey-core, so they only apply to 'library'.
 cover — a fork, another chunk, another package — instead of the product's own. Nothing in the
 SurveyJS repos needs it; it exists so that an unusual layout is not a reason to go back to the old
 generator.
+
+### Presets
+
+A **preset** is a named bundle of emitters, so a release step names one instead of spelling out
+the flags — and the exact set of artifacts a build or a site publish produces lives in one place
+([cli.ts](src/cli.ts)) rather than in a script that could drift from it. Each product has two:
+
+```bash
+survey-utils generate-doc library-site  --path ../survey-library
+survey-utils generate-doc creator-site  --path ../survey-creator
+```
+
+Presets take **only `--path` and `--out`**; every other option is ignored — the preset decides
+the emitters, so there is nothing else to select. `--out` defaults to the product's docs folder,
+exactly as it does for a plain `generate-doc` run.
+
+| Preset | Emits |
+| --- | --- |
+| `library-build` | `llms.txt` (copied from survey-utils' `static/llms.txt`) and `surveyjs_definition.json` in `<out>`, and `survey-json-authoring.md` in `<out>/llms` |
+| `library-site` | `classes.json`, `pmes.json` and `surveyjs_definition.json` in `<out>`, `survey-json-authoring.md` in `<out>/llms`, and the Markdown API reference in `<out>/api-reference` |
+| `creator-site`, `pdf-site`, `analytics-site` | `classes.json` and `pmes.json` in `<out>`, and the Markdown API reference in `<out>/api-reference` |
+| `creator-build`, `pdf-build`, `analytics-build` | Nothing — a no-op (see below) |
+
+The two roles: **`-build`** is the artifacts shipped inside the product's npm package;
+**`-site`** is the artifacts the website serves.
+
+Only `library` has a built bundle, so only its presets emit the schema (`surveyjs_definition.json`)
+and the LLM guide (`survey-json-authoring.md`) — both are generated from survey-core's `Serializer`.
+Creator, the PDF Generator and the Dashboard are documented AST/JSDoc only, so their `-site` presets
+emit just the doc model (`classes.json` + `pmes.json`) and the Markdown reference, and their
+`-build` presets have nothing to ship and do nothing — kept for symmetry so a release script can
+name `<product>-build` uniformly.
 
 ### The schema and the guide
 

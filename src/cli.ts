@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import * as ts from "typescript";
 import * as path from "path";
+import * as fs from "fs";
 import {
   buildModel, buildDocModelJSON, buildJSONDefinitionAST, buildMDFiles, buildLLMGuide,
   buildJSONDefinitionRuntime, loadBundle, findBundle, SurveyBundle, setJsonObj, diffFiles,
@@ -44,6 +45,35 @@ checkout, where survey-utils sits beside survey-library, survey-creator, survey-
 except that generate-doc uses the working directory first, so a product calling the bin from
 its own package.json needs no --path.
 
+survey-utils generate-doc <preset> [--path <dir>] [--out <dir>]
+
+  Presets bundle a fixed set of emitters for a product -- the Form Library, Survey Creator, the
+  PDF Generator or the Dashboard -- so a release script names one instead of listing flags. They
+  take only --path and --out; every other option is ignored.
+
+  library-build             The artifacts shipped inside the survey-core npm package:
+                            llms.txt (copied from survey-utils' static/llms.txt) and
+                            surveyjs_definition.json in <out>, and survey-json-authoring.md
+                            in <out>/llms.
+  library-site              The artifacts the website serves: classes.json, pmes.json and
+                            surveyjs_definition.json in <out>, survey-json-authoring.md in
+                            <out>/llms, and the Markdown API reference in <out>/api-reference.
+  creator-build             Nothing: Survey Creator ships no generated doc artifacts in its
+                            package, so this preset is a no-op kept for symmetry with the others.
+  creator-site             The artifacts the website serves for Survey Creator: classes.json and
+                            pmes.json in <out>, and the Markdown API reference in <out>/api-reference.
+                            Creator has no built bundle, so there is no schema or LLM guide.
+  pdf-build                 Nothing: the PDF Generator ships no generated doc artifacts in its
+                            package, so this preset is a no-op kept for symmetry with the others.
+  pdf-site                 The artifacts the website serves for the PDF Generator: classes.json and
+                            pmes.json in <out>, and the Markdown API reference in <out>/api-reference.
+                            The PDF Generator has no built bundle, so there is no schema or LLM guide.
+  analytics-build           Nothing: the Dashboard ships no generated doc artifacts in its package,
+                            so this preset is a no-op kept for symmetry with the others.
+  analytics-site           The artifacts the website serves for the Dashboard: classes.json and
+                            pmes.json in <out>, and the Markdown API reference in <out>/api-reference.
+                            The Dashboard has no built bundle, so there is no schema or LLM guide.
+
 survey-utils generate-doc [product] [options]
 
   [product]                 ${docProductNames.join(" | ")}. The entry files follow from it --
@@ -82,9 +112,9 @@ ${EMITTERS}
   --split                   Also emit one file per question type into <out>/llm-guide/.
   --with-member-links       Member-level API links in the split files. Off by default: ~400
                             links cost 6-10k tokens, and only a reader that can fetch them pays off.
-  --llm-guide-out <dir>     Write survey-json-authoring.md here instead of <out>, resolved against
-                            --path -- e.g. the guide to survey-core/llms while --md and the schema
-                            stay under <out>. Only the guide file moves; the split files and
+  --llm-guide-out <dir>     Where survey-json-authoring.md goes, resolved against --path.
+                            Default: llms -- the guide lands in survey-core/llms while --md and the
+                            schema stay under <out>. Only the guide file moves; the split files and
                             llms.txt stay in <out>.
 
   --out <dir>               Output root, resolved against --path. Default: the docs folder of the
@@ -132,7 +162,7 @@ interface DocArgs {
   sourceBaseUrl?: string;
   /** --out. Absent: the docs folder of the package the product is documented from, see docOut(). */
   out?: string;
-  /** --llm-guide-out: where survey-json-authoring.md goes when it must not sit in --out. */
+  /** --llm-guide-out: where survey-json-authoring.md goes. Absent: 'llms', not --out. */
   guideOut?: string;
   check: boolean;
 }
@@ -321,6 +351,181 @@ function loadDocBundle(args: DocArgs, root: string): SurveyBundle | null {
   );
 }
 
+/**
+ * The presets: `generate-doc <product>-build` and `generate-doc <product>-site`, for the Form
+ * Library, Survey Creator, the PDF Generator and the Dashboard. Each is a named bundle of emitters
+ * -- a release step names the preset instead of spelling out the flags, so the set of artifacts a
+ * build or a site publish produces lives here, in one place, rather than in a script that could
+ * drift from it.
+ *
+ * Library diverges from the rest because only survey-core has a built bundle: Creator, the PDF
+ * Generator and the Dashboard are documented AST/JSDoc only, so the schema and the LLM guide --
+ * both generated from survey-core's Serializer -- have no place in their presets. Their -build
+ * presets have nothing to ship and do nothing; their -site presets emit only classes.json,
+ * pmes.json and the Markdown API reference.
+ */
+const PRESETS = [
+  "library-build", "library-site", "creator-build", "creator-site", "pdf-build", "pdf-site",
+  "analytics-build", "analytics-site"
+] as const;
+type Preset = (typeof PRESETS)[number];
+
+function isPreset(name: string): name is Preset {
+  return (PRESETS as readonly string[]).indexOf(name) >= 0;
+}
+
+/** A preset's product and mode, split from its name: 'creator-site' -> ['creator', 'site']. */
+function presetParts(preset: Preset): { product: string; mode: "build" | "site" } {
+  const dash = preset.indexOf("-");
+  return { product: preset.substring(0, dash), mode: preset.substring(dash + 1) as "build" | "site" };
+}
+
+interface PresetArgs {
+  path?: string;
+  out?: string;
+}
+
+/**
+ * A preset takes only --path and --out; every other token is ignored, as documented. The set of
+ * artifacts is fixed by the preset, so there is nothing else for the caller to select, and a
+ * stray flag left over from a full generate-doc invocation is silently harmless rather than fatal.
+ */
+function parsePresetArgs(args: string[]): PresetArgs {
+  const res: PresetArgs = {};
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--path" || arg === "--out") {
+      const next = args[++i];
+      if (next === undefined || next.indexOf("--") === 0) throw new UsageError(arg + " needs a value");
+      if (arg === "--path") res.path = next;
+      else res.out = next;
+    }
+    // Everything else is ignored on purpose: the preset decides the emitters.
+  }
+  return res;
+}
+
+/** survey-utils' own static/llms.txt, shipped in the package beside dist/. */
+function staticLlmsTxt(): string {
+  return fs.readFileSync(path.join(__dirname, "..", "static", "llms.txt"), "utf8");
+}
+
+function runPreset(preset: Preset, args: PresetArgs): number {
+  const { product, mode } = presetParts(preset);
+  const root = docRoot(product, args.path);
+  const out = path.resolve(root, !!args.out ? args.out : docOut(product, root));
+  const entries = docEntries(product, root);
+  const docProduct = docProducts[product].docProduct;
+  console.log(
+    `${preset}: ${entries.map((entry) => path.relative(root, entry)).join(", ")} (under ${root}, out ${out})`
+  );
+
+  return product === SERIALIZER_PRODUCT
+    ? runLibraryPreset(mode, args, root, entries, out, docProduct)
+    : runBundlelessPreset(preset, mode, entries, out, docProduct, root);
+}
+
+/**
+ * The Form Library presets. Both emit the schema and the LLM guide -- both generated from
+ * survey-core's built bundle, so it is required here, and loadDocBundle reports where it looked
+ * when there is nothing built. build then copies survey-utils' static llms.txt; site adds
+ * classes.json, pmes.json and the Markdown API reference.
+ */
+function runLibraryPreset(
+  mode: "build" | "site", args: PresetArgs, root: string, entries: string[], out: string,
+  docProduct: string
+): number {
+  const bundle = loadDocBundle(
+    { ...emptyDocArgs(), product: SERIALIZER_PRODUCT, path: args.path, jsonDefinition: "runtime", llmGuide: true },
+    root
+  );
+  if (!bundle) return 1; // loadDocBundle throws when a needed bundle is missing; guard for the type.
+  const serializer = bundle.Serializer;
+  setJsonObj(serializer);
+  const model = buildModel(entries, { target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS }, root);
+  if (!model) return 1;
+
+  const files: FileMap = {};
+
+  // surveyjs_definition.json in the out root -- both presets.
+  files[path.join(resolveDir(out), "surveyjs_definition.json")] = buildJSONDefinitionRuntime(serializer);
+
+  // survey-json-authoring.md in <out>/llms -- both presets. buildLLMGuide also emits llms.txt into
+  // outputDir, but the presets manage llms.txt themselves (build copies the static one, site omits
+  // it), so only the guide file is kept.
+  const guide = buildLLMGuide(model, <any>bundle, {
+    outputDir: out,
+    guideOutputDir: path.join(out, "llms"),
+    fileNames: entries,
+    product: docProduct
+  });
+  Object.keys(guide.files).forEach((file) => {
+    if (path.basename(file) === "llms.txt") return;
+    files[file] = guide.files[file];
+  });
+  console.log(
+    `LLM guide: ${(guide.bytes / 1024).toFixed(1)} KB, ~${guide.approxTokens} tokens; `
+    + `${guide.facts.documented} documented properties, ${guide.facts.undocumented} without JSDoc.`
+  );
+  guide.warnings.forEach((warning) => console.warn("warning: " + warning));
+
+  if (mode === "build") {
+    // llms.txt in the out root, copied from survey-utils' own static file.
+    files[path.join(resolveDir(out), "llms.txt")] = staticLlmsTxt();
+  } else {
+    // library-site: classes.json + pmes.json in the out root, and the Markdown API reference.
+    Object.assign(files, buildDocModelJSON(model, out));
+    Object.assign(files, buildMDFiles(model.classes, model.pmes, {
+      product: docProduct,
+      fileNames: entries,
+      outputDir: path.join(out, "api-reference")
+    }));
+  }
+
+  const written = writeFiles(files);
+  console.log(`${written.length} file(s) written.`);
+  return 0;
+}
+
+/**
+ * The presets for a product without a built bundle -- Survey Creator and the PDF Generator. With
+ * no bundle there is no schema and no LLM guide to emit; the docs are AST/JSDoc only. The -build
+ * preset has nothing to ship and does nothing; the -site preset emits classes.json and pmes.json
+ * in the out root and the Markdown API reference in <out>/api-reference.
+ */
+function runBundlelessPreset(
+  preset: Preset, mode: "build" | "site", entries: string[], out: string, docProduct: string,
+  root: string
+): number {
+  if (mode === "build") {
+    console.log(`${preset}: nothing to build.`);
+    return 0;
+  }
+
+  const model = buildModel(entries, { target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS }, root);
+  if (!model) return 1;
+
+  const files: FileMap = {};
+  Object.assign(files, buildDocModelJSON(model, out));
+  Object.assign(files, buildMDFiles(model.classes, model.pmes, {
+    product: docProduct,
+    fileNames: entries,
+    outputDir: path.join(out, "api-reference")
+  }));
+
+  const written = writeFiles(files);
+  console.log(`${written.length} file(s) written.`);
+  return 0;
+}
+
+/** The DocArgs defaults, so a preset can hand loadDocBundle a well-formed value. */
+function emptyDocArgs(): DocArgs {
+  return {
+    product: SERIALIZER_PRODUCT, entries: [], md: false, json: false, llmGuide: false,
+    split: false, withMemberLinks: false, check: false
+  };
+}
+
 function generateDoc(args: DocArgs): number {
   // The product's repo: --path, the working directory when the entries are already under it,
   // or the sibling checkout. Every relative path the caller passed resolves against it.
@@ -339,7 +544,7 @@ function generateDoc(args: DocArgs): number {
   // Without --out the docs go to the package they document -- packages/survey-core/docs whether
   // the run started at the repo root or in the package itself, so both write the same folder.
   const out = at(!!args.out ? args.out : docOut(args.product, root));
-  const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api");
+  const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api-reference");
 
   const bundle = loadDocBundle(args, root);
   const serializer = bundle ? bundle.Serializer : null;
@@ -368,7 +573,7 @@ function generateDoc(args: DocArgs): number {
     if (args.llmGuide) {
       const guide = buildLLMGuide(model, <any>bundle, {
         outputDir: out,
-        guideOutputDir: !!args.guideOut ? at(args.guideOut) : undefined,
+        guideOutputDir: at(!!args.guideOut ? args.guideOut : "llms"),
         fileNames: entries,
         product: docProduct,
         sourceBaseUrl: args.sourceBaseUrl,
@@ -409,7 +614,11 @@ function main(): void {
   }
   try {
     if (command === "generate-doc") {
-      process.exit(generateDoc(parseDocArgs(argv.slice(1))));
+      const rest = argv.slice(1);
+      if (isPreset(rest[0])) {
+        process.exit(runPreset(rest[0], parsePresetArgs(rest.slice(1))));
+      }
+      process.exit(generateDoc(parseDocArgs(rest)));
     }
     if (command === "check-strings") {
       process.exit(runCheckUnusedStrings(argv.slice(1)));
