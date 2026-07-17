@@ -53,9 +53,9 @@ The repository contains:
 
 ## Survey JSON Schema
 
-Authoring guide: https://surveyjs.io/form-library/llms/survey-json-authoring.md
+Authoring guide: ./llms/survey-json-authoring.md
 
-Machine-readable definition: https://unpkg.com/survey-core/surveyjs_definition.json
+Machine-readable definition: ./surveyjs_definition.json
 
 API reference: https://surveyjs.io/form-library/documentation/api-reference.md
 
