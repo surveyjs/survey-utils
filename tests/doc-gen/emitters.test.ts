@@ -94,6 +94,14 @@ describe("emitters over one doc model", () => {
     expect(second).toEqual(first);
   });
 
+  test("@since reaches classes.json and pmes.json", () => {
+    const files = buildDocModelJSON(build("tags"), "docs");
+    const classes = JSON.parse(files[path.join(process.cwd(), "docs", "classes.json")]);
+    const pmes = JSON.parse(files[path.join(process.cwd(), "docs", "pmes.json")]);
+    expect(classes.find((c: any) => c.name === "ElementBase").since).toBe("1.9.0");
+    expect(pmes.find((p: any) => p.className === "ElementBase" && p.name === "isVisible").since).toBe("1.9.100");
+  });
+
   test("buildModel returns null for a missing entry file", () => {
     expect(buildModel(["tests/doc-gen/fixtures/nope.entry.ts"], {})).toBeNull();
   });
