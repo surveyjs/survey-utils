@@ -415,7 +415,7 @@ function renderSplit(
         });
         add("");
       }
-      files[path.join(outputDir, GUIDE_DIR, cls.name + ".md")] =
+      files[path.join(outputDir, GUIDE_DIR, cls.name.toLowerCase() + ".md")] =
         out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "") + "\n";
     });
   return files;

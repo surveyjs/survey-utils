@@ -47,7 +47,7 @@ describe("emitters over one doc model", () => {
     const definition = buildJSONDefinitionAST(model, "docs");
 
     expect(Object.keys(json).map((p) => path.basename(p)).sort()).toEqual(["classes.json", "pmes.json"]);
-    expect(Object.keys(md).map((p) => path.basename(p))).toContain("SurveyModel.md");
+    expect(Object.keys(md).map((p) => path.basename(p))).toContain("surveymodel.md");
     expect(Object.keys(definition).map((p) => path.basename(p))).toEqual(["surveyjs_definition.json"]);
   });
 

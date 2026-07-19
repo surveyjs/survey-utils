@@ -28,9 +28,11 @@ export interface MDGenerationOptions {
 
 /**
  * Builds one Markdown file per documented class/interface following the
- * API-reference template, plus an `index.md`. Returns the files keyed by their
- * absolute path; nothing is written. Use generateMDFiles() to write them, or
- * diff the result to implement `--check`.
+ * API-reference template, plus an `index.md`. File names are the lowercased
+ * class/interface name (`surveymodel.md`), matching the lowercase links that
+ * sourceUrl() emits. Returns the files keyed by their absolute path; nothing is
+ * written. Use generateMDFiles() to write them, or diff the result to
+ * implement `--check`.
  *
  * @param classes The `outputClasses` produced by buildModel (docs/classes.json).
  * @param pmes The `outputPMEs` produced by buildModel (docs/pmes.json).
@@ -47,7 +49,7 @@ export function buildMDFiles(
   for (let i = 0; i < classes.length; i++) {
     const cls = classes[i];
     if (!isDocumentedEntry(cls) || !cls.name || !hasDescription(cls)) continue;
-    files[path.join(outputDir, cls.name + ".md")] =
+    files[path.join(outputDir, cls.name.toLowerCase() + ".md")] =
       generateMDForClass(cls, members, product, options.sourceBaseUrl);
   }
   files[path.join(outputDir, "index.md")] =
@@ -57,8 +59,8 @@ export function buildMDFiles(
 
 /**
  * Generates one Markdown file per documented class/interface following the
- * API-reference template. Files are named `<ClassName>.md` / `<InterfaceName>.md`
- * and written into `docs/api` (created when missing).
+ * API-reference template. Files are named after the lowercased class/interface
+ * name (`<classname>.md`) and written into `docs/api` (created when missing).
  */
 export function generateMDFiles(
   classes: DocEntry[], pmes: DocEntry[], options: MDGenerationOptions = {}

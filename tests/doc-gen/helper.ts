@@ -55,7 +55,7 @@ export function entryFile(fixtureName: string): string {
   return "tests/doc-gen/fixtures/" + fixtureName + ".entry.ts";
 }
 
-/** The generated markdown keyed by file name (e.g. "SimpleModel.md"). */
+/** The generated markdown keyed by file name (e.g. "simplemodel.md"). */
 export function runMDGenerator(
   classes: any[], pmes: any[], options: MDGenerationOptions = {}
 ): { [fileName: string]: string } {

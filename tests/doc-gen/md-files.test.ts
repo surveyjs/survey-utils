@@ -15,15 +15,15 @@ describe("generateMDFiles", () => {
     beforeAll(() => {
       const docs = runDocGenerator("smoke");
       files = runMDGenerator(docs.classes, docs.pmes);
-      md = files["SimpleModel.md"];
+      md = files["simplemodel.md"];
     });
 
     test("a file is generated per documented class, named <ClassName>.md", () => {
-      expect(files["SimpleModel.md"]).toBeDefined();
+      expect(files["simplemodel.md"]).toBeDefined();
     });
 
     test("undocumented classes do not produce a file", () => {
-      expect(files["NotDocumented.md"]).toBeUndefined();
+      expect(files["notdocumented.md"]).toBeUndefined();
     });
 
     test("classes and interfaces without a description do not produce a file", () => {
@@ -34,10 +34,10 @@ describe("generateMDFiles", () => {
         { name: "INoDocIface", entryType: 2, documentation: "" }
       ];
       const out = runMDGenerator(classes as any, []);
-      expect(out["Documented.md"]).toBeDefined();
-      expect(out["IDocumented.md"]).toBeDefined();
-      expect(out["NoDocClass.md"]).toBeUndefined();
-      expect(out["INoDocIface.md"]).toBeUndefined();
+      expect(out["documented.md"]).toBeDefined();
+      expect(out["idocumented.md"]).toBeDefined();
+      expect(out["nodocclass.md"]).toBeUndefined();
+      expect(out["inodociface.md"]).toBeUndefined();
     });
 
     test("front matter carries the title, product and api-type", () => {
@@ -56,7 +56,7 @@ describe("generateMDFiles", () => {
         name: "EmailValidator", entryType: 1,
         documentation: "A class that implements a validator for e-mail addresses. [View Demo](https://surveyjs.io/form-library/examples/javascript-form-validation/ (linkStyle))"
       }];
-      const out = runMDGenerator(classes as any, [])["EmailValidator.md"];
+      const out = runMDGenerator(classes as any, [])["emailvalidator.md"];
       // Inspect only the front-matter block; the body keeps the full documentation.
       const frontMatter = out.split("---")[1];
       expect(frontMatter).toContain("description: A class that implements a validator for e-mail addresses.");
@@ -113,7 +113,7 @@ describe("generateMDFiles", () => {
         { className: "Sample", name: "run", pmeType: "method", returnType: "void", documentation: "R method." },
         { className: "Sample", name: "brake", pmeType: "method", returnType: "void", documentation: "B method." }
       ];
-      const out = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const out = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(out.indexOf("`apple`")).toBeLessThan(out.indexOf("`mango`"));
       expect(out.indexOf("`mango`")).toBeLessThan(out.indexOf("`zebra`"));
       expect(out.indexOf("`brake()`")).toBeLessThan(out.indexOf("`run()`"));
@@ -127,7 +127,7 @@ describe("generateMDFiles", () => {
         { className: "Sample", name: "documentedMethod", pmeType: "method", returnType: "void", documentation: "A documented method." },
         { className: "Sample", name: "silentMethod", pmeType: "method", returnType: "void", documentation: "   " }
       ];
-      const out = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const out = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(out).toContain("### `documentedProp`");
       expect(out).toContain("### `documentedMethod()`");
       expect(out).not.toContain("silentProp");
@@ -146,7 +146,7 @@ describe("generateMDFiles", () => {
         { className: "Sample", name: "raw", pmeType: "property", type: "ArrayBuffer", documentation: "The raw value." },
         { className: "Sample", name: "raw", pmeType: "property", type: "Blob", documentation: "The raw value." }
       ];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       // Exactly one heading for the member.
       expect(md.match(/### `raw`/g)?.length).toBe(1);
       // A single Type line carries the union of all declared types.
@@ -158,7 +158,7 @@ describe("generateMDFiles", () => {
         { className: "Sample", name: "count", pmeType: "property", type: "number", documentation: "A count." },
         { className: "Sample", name: "count", pmeType: "property", type: "number", documentation: "A count." }
       ];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md.match(/### `count`/g)?.length).toBe(1);
       expect(md).toContain("**Type**: `number`");
     });
@@ -174,7 +174,7 @@ describe("generateMDFiles", () => {
           documentation: "Gets the data."
         }
       ];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md.match(/### `getData\(\)`/g)?.length).toBe(1);
       expect(md).toContain("**Return value:** `string | ArrayBuffer`");
     });
@@ -184,7 +184,7 @@ describe("generateMDFiles", () => {
         { className: "Sample", name: "alpha", pmeType: "property", type: "string", documentation: "Alpha." },
         { className: "Sample", name: "beta", pmeType: "property", type: "number", documentation: "Beta." }
       ];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("### `alpha`");
       expect(md).toContain("### `beta`");
       expect(md).toContain("**Type**: `string`");
@@ -200,7 +200,7 @@ describe("generateMDFiles", () => {
     });
 
     test("an interface produces a <InterfaceName>.md file marked api-type: interface", () => {
-      const md = files["IPanel.md"];
+      const md = files["ipanel.md"];
       expect(md).toBeDefined();
       expect(md).toContain("api-type: interface");
       expect(md).toContain("# `IPanel`");
@@ -209,7 +209,7 @@ describe("generateMDFiles", () => {
     });
 
     test("a class with different member kinds is rendered", () => {
-      const md = files["MemberKinds.md"];
+      const md = files["memberkinds.md"];
       expect(md).toBeDefined();
       expect(md).toContain("api-type: class");
       expect(md).toContain("### `readOnlyValue`");
@@ -249,8 +249,8 @@ describe("generateMDFiles", () => {
         { name: "silentVar", entryType: 4, documentation: "   " }
       ];
       const out = runMDGenerator(entries as any, []);
-      expect(out["documentedVar.md"]).toBeDefined();
-      expect(out["silentVar.md"]).toBeUndefined();
+      expect(out["documentedvar.md"]).toBeDefined();
+      expect(out["silentvar.md"]).toBeUndefined();
     });
   });
 
@@ -258,7 +258,7 @@ describe("generateMDFiles", () => {
     test("the Inheritance section lists base types from the root down to the class", () => {
       const docs = runDocGenerator("inheritance");
       const files = runMDGenerator(docs.classes, docs.pmes);
-      const md = files["QuestionText.md"];
+      const md = files["questiontext.md"];
       const base = "https://surveyjs.io/form-library/documentation/api-reference";
       expect(md).toContain("## Inheritance");
       expect(md).toContain(
@@ -269,7 +269,7 @@ describe("generateMDFiles", () => {
     test("a root class without a base type has no Inheritance section", () => {
       const docs = runDocGenerator("inheritance");
       const files = runMDGenerator(docs.classes, docs.pmes);
-      expect(files["Base.md"]).not.toContain("## Inheritance");
+      expect(files["base.md"]).not.toContain("## Inheritance");
     });
   });
 
@@ -281,7 +281,7 @@ describe("generateMDFiles", () => {
         className: "Sample", name: "name", pmeType: "property", type: "string",
         documentation: "The element name.", see: ["width", "widthValue"]
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("**Related APIs:** [`width`](#width), [`widthValue`](#widthValue)");
     });
 
@@ -296,7 +296,7 @@ describe("generateMDFiles", () => {
           documentation: "The B description."
         }
       ];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       const related = md.indexOf("**Related APIs:**");
       expect(md.indexOf("The A description.")).toBeLessThan(related);
       expect(related).toBeLessThan(md.indexOf("### `bbb`"));
@@ -309,7 +309,7 @@ describe("generateMDFiles", () => {
         parameters: [{ name: "who", type: "string", documentation: "A person name." }],
         see: ["name"]
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("**Related APIs:** [`name`](#name)");
       expect(md.indexOf("**Parameters:**")).toBeLessThan(md.indexOf("**Related APIs:**"));
     });
@@ -319,7 +319,7 @@ describe("generateMDFiles", () => {
         className: "Sample", name: "onComplete", pmeType: "event",
         documentation: "An event raised on complete.", see: ["onStarted"]
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("**Related APIs:** [`onStarted`](#onStarted)");
       expect(md.indexOf("An event raised on complete.")).toBeLessThan(md.indexOf("**Related APIs:**"));
     });
@@ -339,7 +339,7 @@ describe("generateMDFiles", () => {
           documentation: "Blank see entries.", see: ["", "   ", null]
         }
       ];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).not.toContain("**Related APIs:**");
     });
 
@@ -348,7 +348,7 @@ describe("generateMDFiles", () => {
         className: "Sample", name: "name", pmeType: "property", type: "string",
         documentation: "The element name.", see: "width"
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("**Related APIs:** [`width`](#width)");
     });
 
@@ -357,7 +357,7 @@ describe("generateMDFiles", () => {
         className: "Sample", name: "name", pmeType: "property", type: "string",
         documentation: "The element name.", see: ["width *", "widthValue"]
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("**Related APIs:** [`width`](#width), [`widthValue`](#widthValue)");
       expect(md).not.toContain("width *");
     });
@@ -368,7 +368,7 @@ describe("generateMDFiles", () => {
         className: "Sample", name: "choicesSeparator", pmeType: "property", type: "string",
         documentation: "Separator.", see: ["[settings.itemValueSeparator](" + url + ")"]
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("**Related APIs:** [`settings.itemValueSeparator`](" + url + ")");
     });
 
@@ -378,14 +378,14 @@ describe("generateMDFiles", () => {
         className: "Sample", name: "choicesSeparator", pmeType: "property", type: "string",
         documentation: "Separator.", see: ["width", "[settings.itemValueSeparator](" + url + ")"]
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("**Related APIs:** [`width`](#width), [`settings.itemValueSeparator`](" + url + ")");
     });
 
     test("the tags fixture renders the @see tags of ElementBase.name", () => {
       const docs = runDocGenerator("tags");
       const files = runMDGenerator(docs.classes, docs.pmes);
-      expect(files["ElementBase.md"]).toContain(
+      expect(files["elementbase.md"]).toContain(
         "**Related APIs:** [`width`](#width), [`widthValue`](#widthValue)"
       );
     });
@@ -397,19 +397,19 @@ describe("generateMDFiles", () => {
     }];
 
     test("a class with @since renders an Available since line after its description", () => {
-      const md = runMDGenerator(classes as any, [])["Sample.md"];
+      const md = runMDGenerator(classes as any, [])["sample.md"];
       expect(md).toContain("Available since: v1.9.0");
       expect(md.indexOf("A sample class.")).toBeLessThan(md.indexOf("Available since: v1.9.0"));
     });
 
     test("a class without @since has no Available since line", () => {
       const bare = [{ name: "Sample", entryType: 1, documentation: "A sample class." }];
-      expect(runMDGenerator(bare as any, [])["Sample.md"]).not.toContain("Available since:");
+      expect(runMDGenerator(bare as any, [])["sample.md"]).not.toContain("Available since:");
     });
 
     test("a leading v in the tag is not duplicated", () => {
       const tagged = [{ name: "Sample", entryType: 1, documentation: "A sample class.", since: "v2.5.0" }];
-      const md = runMDGenerator(tagged as any, [])["Sample.md"];
+      const md = runMDGenerator(tagged as any, [])["sample.md"];
       expect(md).toContain("Available since: v2.5.0");
       expect(md).not.toContain("vv2.5.0");
     });
@@ -419,7 +419,7 @@ describe("generateMDFiles", () => {
         className: "Sample", name: "isVisible", pmeType: "property", type: "boolean",
         documentation: "Specifies the visibility.", since: "1.9.100", see: ["name"]
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("Available since: v1.9.100");
       expect(md.indexOf("Specifies the visibility.")).toBeLessThan(md.indexOf("Available since: v1.9.100"));
       expect(md.indexOf("Available since: v1.9.100")).toBeLessThan(md.indexOf("**Related APIs:**"));
@@ -431,7 +431,7 @@ describe("generateMDFiles", () => {
         documentation: "Greets someone.", since: "2.0.0",
         parameters: [{ name: "who", type: "string", documentation: "A person name." }]
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md.indexOf("Available since: v2.0.0")).toBeLessThan(md.indexOf("**Parameters:**"));
     });
 
@@ -440,13 +440,13 @@ describe("generateMDFiles", () => {
         className: "Sample", name: "onComplete", pmeType: "event",
         documentation: "An event raised on complete.", since: "3.1.0"
       }];
-      const md = runMDGenerator(classes as any, pmes as any)["Sample.md"];
+      const md = runMDGenerator(classes as any, pmes as any)["sample.md"];
       expect(md).toContain("Available since: v3.1.0");
     });
 
     test("the tags fixture renders the @since of the class and its member", () => {
       const docs = runDocGenerator("tags");
-      const md = runMDGenerator(docs.classes, docs.pmes)["ElementBase.md"];
+      const md = runMDGenerator(docs.classes, docs.pmes)["elementbase.md"];
       expect(md).toContain("Available since: v1.9.0");
       expect(md).toContain("Available since: v1.9.100");
     });
@@ -456,7 +456,7 @@ describe("generateMDFiles", () => {
     test("events are rendered under an Events section with their documentation", () => {
       const docs = runDocGenerator("events");
       const files = runMDGenerator(docs.classes, docs.pmes);
-      const md = files["SurveyModel.md"];
+      const md = files["surveymodel.md"];
       expect(md).toContain("## Events");
       expect(md).toContain("### `onComplete`");
       expect(md).toContain("An event raised when the survey is completed.");
@@ -469,7 +469,7 @@ describe("generateMDFiles", () => {
     test("the product name can be overridden", () => {
       const docs = runDocGenerator("smoke");
       const files = runMDGenerator(docs.classes, docs.pmes, { product: "Survey Creator" });
-      expect(files["SimpleModel.md"]).toContain("product: Survey Creator");
+      expect(files["simplemodel.md"]).toContain("product: Survey Creator");
     });
   });
 
@@ -614,7 +614,7 @@ describe("generateMDFiles", () => {
   describe("generateDocumentation integration", () => {
     test("generateMDFiles: true writes Markdown and skips the JSON files", () => {
       const files = runFullGenerator("smoke", { generateMDFiles: true });
-      expect(files["SimpleModel.md"]).toBeDefined();
+      expect(files["simplemodel.md"]).toBeDefined();
       expect(files["classes.json"]).toBeUndefined();
       expect(files["pmes.json"]).toBeUndefined();
     });
@@ -623,14 +623,14 @@ describe("generateMDFiles", () => {
       const files = runFullGenerator("smoke", {});
       expect(files["classes.json"]).toBeDefined();
       expect(files["pmes.json"]).toBeDefined();
-      expect(files["SimpleModel.md"]).toBeUndefined();
+      expect(files["simplemodel.md"]).toBeUndefined();
     });
 
     test("without outputDir the files go to docs (Markdown to docs/api-reference)", () => {
       runFullGenerator("smoke", {});
       expect(dirOf("classes.json")).toBe(path.join(process.cwd(), "docs"));
       runFullGenerator("smoke", { generateMDFiles: true });
-      expect(dirOf("SimpleModel.md")).toBe(path.join(process.cwd(), "docs", "api-reference"));
+      expect(dirOf("simplemodel.md")).toBe(path.join(process.cwd(), "docs", "api-reference"));
     });
 
     test("outputDir sets the directory of the JSON files", () => {
@@ -643,13 +643,13 @@ describe("generateMDFiles", () => {
     test("outputDir sets the directory of the Markdown files", () => {
       const outputDir = path.join(process.cwd(), "out", "md");
       runFullGenerator("smoke", { generateMDFiles: true, outputDir: outputDir });
-      expect(dirOf("SimpleModel.md")).toBe(outputDir);
+      expect(dirOf("simplemodel.md")).toBe(outputDir);
       expect(dirOf("index.md")).toBe(outputDir);
     });
 
     test("a relative outputDir is resolved against the working directory", () => {
       runFullGenerator("smoke", { generateMDFiles: true, outputDir: "out/relative" });
-      expect(dirOf("SimpleModel.md")).toBe(path.join(process.cwd(), "out", "relative"));
+      expect(dirOf("simplemodel.md")).toBe(path.join(process.cwd(), "out", "relative"));
     });
 
     test("mdOptions.outputDir wins over outputDir for the Markdown files", () => {
@@ -659,7 +659,7 @@ describe("generateMDFiles", () => {
         outputDir: path.join(process.cwd(), "out"),
         mdOptions: { outputDir: mdDir }
       });
-      expect(dirOf("SimpleModel.md")).toBe(mdDir);
+      expect(dirOf("simplemodel.md")).toBe(mdDir);
     });
   });
 
@@ -688,7 +688,7 @@ describe("generateMDFiles", () => {
     test("the detected/overridden product drives the source URL in the file", () => {
       const docs = runDocGenerator("smoke");
       const files = runMDGenerator(docs.classes, docs.pmes, { product: "PDF Generator" });
-      expect(files["SimpleModel.md"])
+      expect(files["simplemodel.md"])
         .toContain("source: https://surveyjs.io/pdf-generator/documentation/api-reference/simplemodel");
     });
   });
@@ -720,7 +720,7 @@ describe("generateMDFiles", () => {
     test("generateMDFiles derives the product from options.fileNames", () => {
       const docs = runDocGenerator("smoke");
       const files = runMDGenerator(docs.classes, docs.pmes, { fileNames: ["src/entries/pdf.ts"] });
-      expect(files["SimpleModel.md"]).toContain("product: PDF Generator");
+      expect(files["simplemodel.md"]).toContain("product: PDF Generator");
     });
 
     test("an explicit product option wins over detection", () => {
@@ -728,7 +728,7 @@ describe("generateMDFiles", () => {
       const files = runMDGenerator(docs.classes, docs.pmes, {
         product: "Form Library", fileNames: ["src/entries/pdf.ts"]
       });
-      expect(files["SimpleModel.md"]).toContain("product: Form Library");
+      expect(files["simplemodel.md"]).toContain("product: Form Library");
     });
   });
 });
