@@ -140,6 +140,7 @@ function collectClasses(
     const props = serializer.getProperties(name) || [];
     for (let i = 0; i < props.length; i++) {
       if (props[i].className) queue.push(props[i].className);
+      if (props[i].baseClassName) queue.push(props[i].baseClassName);
     }
   }
   // An ancestor of a question type is a shared base: its properties are documented once.
@@ -186,7 +187,18 @@ function buildClassFact(
     if (parentName && serializer.findProperty(parentName, prop.name)) continue;
     if (prop.isSerializable === false) continue;
     if (prop.alternativeName) aliases[prop.alternativeName] = name + "." + prop.name;
-    if (!callSafely(() => prop.isVisible(""), true, facts.warnings, name + "." + prop.name)) continue;
+    // `isVisible` is Property Grid visibility, not JSON-authoring visibility. Nested
+    // element arrays (`templateElements`, page/panel `elements`, `detailElements`) are
+    // hidden from the grid so the designer edits them on the canvas, but they are the
+    // keys an author writes. Designer-only hooks (`itemComponent`, `renderAs`) stay out.
+    const visible = callSafely(
+      () => prop.isVisible(""), true, facts.warnings, name + "." + prop.name
+    );
+    if (!visible && !prop.baseClassName) continue;
+    // `survey.elements` is a load-only shortcut (`onGetValue` is always null): JSON
+    // never round-trips it, and the guide already describes the root-level shape in
+    // prose. Page/panel `elements` still serialize and stay in the table.
+    if (isLoadOnlyNestedArray(prop)) continue;
 
     const member = docIndex.find(name, prop.name, entry);
     const text = member ? member.documentation : "";
@@ -227,8 +239,8 @@ function toPropertyFact(
   // `className` is only a class when the serializer knows it: some properties carry a
   // primitive there (`dataList` is a `string[]` whose className is "string"), and printing
   // that as a nested object would send an author looking for a class that does not exist.
-  const nested = prop.className && serializer.findClass(String(prop.className))
-    ? String(prop.className) : undefined;
+  // Nested element arrays use `baseClassName` ("question") instead of `className`.
+  const nested = nestedClassName(prop, serializer);
   const text = String(doc || "");
   return {
     name: String(prop.name),
@@ -236,7 +248,7 @@ function toPropertyFact(
     className: nested,
     // The serializer spells an array either as "itemvalues"/"array" or as "<item>[]".
     isArray: type === "array" || /\[\]$/.test(type) || type === "itemvalues"
-      || (!!nested && jsonType === "array"),
+      || (!!nested && jsonType === "array") || !!prop.baseClassName,
     isRequired: prop.isRequired === true,
     isUnique: prop.isUnique === true,
     isLocalizable: prop.isLocalizable === true,
@@ -278,6 +290,24 @@ function toPrimitiveList(choices: any): any[] | undefined {
     res.push(value);
   }
   return res.length > 0 ? res : undefined;
+}
+
+function isLoadOnlyNestedArray(prop: any): boolean {
+  if (!prop.baseClassName) return false;
+  if (typeof prop.onGetValue !== "function") return false;
+  try {
+    return prop.onGetValue({}) === null;
+  } catch {
+    return false;
+  }
+}
+
+function nestedClassName(prop: any, serializer: any): string | undefined {
+  const names = [prop.className, prop.baseClassName].filter(Boolean).map(String);
+  for (let i = 0; i < names.length; i++) {
+    if (serializer.findClass(names[i])) return names[i];
+  }
+  return undefined;
 }
 
 function callSafely<T>(fn: () => T, fallback: T, warnings: string[], where: string): T {

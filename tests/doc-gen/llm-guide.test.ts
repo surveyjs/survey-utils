@@ -52,9 +52,38 @@ describe("the facts come from survey-core, not from a table", () => {
       cls.ownProperties.forEach((prop) => {
         const meta = serializer.findProperty(cls.name, prop.name);
         expect(meta.isSerializable).not.toBe(false);
-        expect(meta.isVisible("")).not.toBe(false);
+        if (!meta.baseClassName) {
+          expect(meta.isVisible("")).not.toBe(false);
+        }
       });
     });
+    facts.classes.forEach((cls) => {
+      expect(cls.ownProperties.some((p) => p.name === "itemComponent")).toBe(false);
+    });
+  });
+
+  itCore("nested element arrays stay in even when hidden from the property grid", () => {
+    const paneldynamic = facts.classes.find((c) => c.name === "paneldynamic");
+    const templateElements = paneldynamic!.ownProperties.find((p) => p.name === "templateElements");
+    expect(templateElements).toBeDefined();
+    expect(templateElements!.isArray).toBe(true);
+    expect(templateElements!.className).toBe("question");
+    expect(text).toMatch(/\| `templateElements` \| `array` of `question` \|/);
+
+    const panelbase = facts.classes.find((c) => c.name === "panelbase");
+    expect(panelbase!.ownProperties.some((p) => p.name === "elements")).toBe(true);
+
+    const matrixdropdownbase = facts.classes.find((c) => c.name === "matrixdropdownbase");
+    expect(matrixdropdownbase!.ownProperties.some((p) => p.name === "detailElements")).toBe(true);
+  });
+
+  itCore("survey.elements is load-only and is not listed next to pages", () => {
+    expect(bundle.Serializer.findProperty("survey", "elements")).toBeTruthy();
+    const survey = facts.classes.find((c) => c.name === "survey");
+    expect(survey!.ownProperties.some((p) => p.name === "elements")).toBe(false);
+    expect(survey!.ownProperties.some((p) => p.name === "pages")).toBe(true);
+    const surveySection = text.split("### `survey`")[1].split("### `")[0];
+    expect(surveySection).not.toMatch(/\| `elements` \|/);
   });
 
   itCore("an inherited property is not repeated in the subclass that inherits it", () => {
