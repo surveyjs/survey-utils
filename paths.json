@@ -1,0 +1,30 @@
+{
+  "$schema-note": "Every relative path the doc commands default to, in one file. Nothing here is a path a caller types: --path names the product repo, --out names the content repo, and these are the folders and files inside each of them. Change a layout here and the CI/CD scripts that only pass --path and --out follow it without an edit.",
+
+  "product": {
+    "$note": "Relative to --path: the root of the product's checkout.",
+    "theme": "packages/survey-core/src/default-theme/base-theme.ts"
+  },
+
+  "site": {
+    "$note": "'repo' is the checkout --out defaults to, looked up next to survey-utils. The rest are relative to --out: the root of that checkout.",
+    "repo": "surveyjs-site-data",
+
+    "$docs-note": "Where each product's -site preset writes, one folder per product. The names are the site's, not the products': survey-creator is published as DocsEditor.",
+    "docs": {
+      "library": "DocsLibrary",
+      "creator": "DocsEditor",
+      "analytics": "DocsAnalytics",
+      "pdf": "DocsPdf"
+    },
+
+    "$topics-note": "Topics filled from the product sources rather than written by hand. Siblings of the docs folders, not inside them.",
+    "tokenTopics": [
+      "Docs/complete-design-token-list.md"
+    ],
+
+    "$subfolder-note": "Inside a product's docs folder.",
+    "apiReference": "api-reference",
+    "llmGuide": "llms"
+  }
+}

@@ -41,7 +41,6 @@
     "check:unused-strings": "node ./dist/cli.js check-strings",
     "translate": "node ./dist/cli.js translate",
     "generate-doc": "node ./dist/cli.js generate-doc",
-    "token-tables": "node ./dist/cli.js token-tables",
     "debug": "ts-node src/translateLibrary.ts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
@@ -50,6 +49,7 @@
     "dist/**/*",
     "allowlists/**/*",
     "static/**/*",
+    "paths.json",
     "README.md"
   ]
 }

@@ -9,13 +9,13 @@ Four commands, each solving a problem that used to be a per-repo script:
 | `translate <product>` | Sends every not-yet-translated string in a product's locale files to the Azure Translator API and writes the result back, keeping the files' comments and structure. |
 | `check-strings [product]` | Reports localization strings that no product source reaches any more, and exits `1` so CI fails when a newly added string is never used. |
 | `generate-doc [product]` | Generates the API docs, the survey JSON Schema and the LLM authoring guide from a product's TypeScript sources and built bundle. |
-| `token-tables <file...>` | Fills the design-token tables of a documentation topic from survey-core's default theme, so the published token list tracks the theme instead of being retyped. |
+| `generate-doc <preset>` | The same, as a named bundle per product and per role: `library-site` publishes everything surveyjs.io serves for the Form Library — the docs *and* the design-token tables — while `library-build` produces what ships in the npm package. |
 
 ```bash
 survey-utils help      # the full option list
 ```
 
-**The first three take a product and find its folders themselves.** Nothing about a repo's layout is
+**All three take a product and find its folders themselves.** Nothing about a repo's layout is
 typed at the command line: `translate` knows where a product keeps its locale files,
 `check-strings` knows its source roots, and `generate-doc` knows the entry files its docs are
 built from — survey-core is documented from `entries/chunks/model.ts`, survey-pdf from
@@ -26,17 +26,26 @@ Products: **`library`** (survey-core), **`creator`** (survey-creator-core), **`a
 (survey-analytics, also accepted as `dashboard`), **`pdf`** (survey-pdf, docs only), and
 **`creator-presets`** (the creator's UI presets, `translate` only). Each is described in full
 under [Using it from a product's package.json](#-using-it-from-a-products-packagejson).
-`token-tables` takes files rather than a product — it writes into the site's content repo, not
-into a product — but it reads survey-library the same way, so `--path` means the same thing there.
+The `-site` presets write into the site's content repo rather than into a product, so they take a
+second root: `--out`. `--path` still means what it means everywhere else — the product repo the
+sources are read from.
+
+**Where the paths *inside* those roots live.** Which file declares the theme, which topic holds
+the token tables, which subfolders the generated docs land in — none of that is passed at the
+command line. It is declared in [paths.json](paths.json), one file at the root of this repo, so a
+pipeline reduced to `--path X --out Y` keeps working when a layout changes upstream: the JSON
+follows the change, this repo is released, and no CI/CD definition is edited. See
+[The path defaults](#-the-path-defaults-pathsjson).
 
 ## 📁 Structure
 
 ```
 survey-utils/
 ├── src/
-│   ├── cli.ts                  # The bin: translate, check-strings, generate-doc, token-tables
+│   ├── cli.ts                  # The bin: generate-doc (+ presets), translate, check-strings
 │   ├── index.ts                # Package exports (see "The package exports" below)
 │   ├── paths.ts                # What --path means: the repo root, for every command
+│   ├── site-paths.ts           # Reads paths.json: the relative paths inside --path and --out
 │   ├── doc-products.ts         # generate-doc: product -> repo, entry files, front-matter name
 │   ├── translate.ts            # translate: product -> localization folder, --key, --path
 │   ├── translateLibrary.ts     # Per-product entry points, kept for the run_translate_*.cmd
@@ -45,11 +54,11 @@ survey-utils/
 │   ├── translateAnalytics.ts
 │   ├── localization-utils.ts   # Locale-file parsing: JSON + comment extraction, Azure calls
 │   ├── checkUnusedStrings.ts   # check-strings: argument parsing, reporting, exit code
-│   ├── token-tables/           # token-tables: the design-token tables of a doc topic
+│   ├── token-tables/           # The design-token tables, filled by the library-site preset
 │   │   ├── theme.ts            #   reads base-theme.ts as data: every --sjs2-* and its value
 │   │   ├── tables.ts           #   the <div id="..."> placeholders and what each one matches
 │   │   ├── value.ts            #   how a value is written in the Value column
-│   │   └── run.ts              #   argument parsing, the per-table report, --check
+│   │   └── run.ts              #   fillTokenTables: the topics, the per-table report
 │   ├── loc-lint/               # The unused-string check itself
 │   │   ├── inventory.ts        #   every key in a product's locale file
 │   │   ├── literals.ts         #   string literals in the product's TS sources (parsed, not grepped)
@@ -67,9 +76,11 @@ survey-utils/
 │   ├── translation_utils.test.ts
 │   ├── loc-lint.test.ts
 │   ├── paths.test.ts           # --path and entry resolution
+│   ├── site-paths.test.ts      # paths.json's defaults, and how --out is resolved
 │   ├── token-tables.test.ts    # placeholder matching, value formatting, idempotency
 │   ├── doc-products.test.ts    # product -> repo + entries, and the roots it refuses
 │   └── doc-gen/                # Doc-generator specs + fixtures
+├── paths.json                  # The relative paths inside --path and --out, in one file
 ├── allowlists/                 # Known-dynamic and known-dead strings, one file per product
 ├── run_*.cmd                   # Windows shortcuts for the checkout-local runs
 ├── dist/                       # Built output (generated; `bin` points at dist/cli.js)
@@ -80,7 +91,7 @@ survey-utils/
 
 ## 📍 `--path <dir>` — where the repo is
 
-`--path` means **one thing in all four commands: the root of a product's repo** — the folder
+`--path` means **one thing in every command: the root of a product's repo** — the folder
 that holds its `package.json`, not a folder inside it. Each command joins its own subfolders onto
 that root, so nothing else about the layout has to be typed:
 
@@ -95,7 +106,7 @@ survey-utils generate-doc  library --md --path ../../LibV3/survey-library
 | `check-strings` | The locale file, the source roots and the built bundle (`packages/survey-core/…`). Only `allowlists/<product>.json` stays in survey-utils. |
 | `translate` | The product's localization folder (`library` → `packages/survey-core/src/localization`). |
 | `generate-doc` | The product's entry files (`library` → `packages/survey-core/entries/chunks/model.ts`), and every relative path the caller passed: `--serializer`, `--out`, `--md-out`. |
-| `token-tables` | survey-core's default theme (`packages/survey-core/src/default-theme/base-theme.ts`). It is always survey-library's, so this is the one command whose `--path` needs no product to go with it. |
+| `generate-doc library-site` | The above, plus survey-core's default theme — `product.theme` in [paths.json](paths.json) — for the design-token tables. |
 
 Without `--path`, `translate` and `check-strings` expect the SurveyJS repos to sit **side by
 side** — the folder that holds `survey-utils` also holds `survey-library`, `survey-creator`,
@@ -132,6 +143,100 @@ gets both wrong blames the entry rather than the bundle, and for every emitter �
 `--json-definition` (runtime), which never builds the doc model — so a root that is not there is
 never quietly ignored.
 
+## 📤 `--out <dir>` — where the generated files go
+
+`--out` means one of two things, and **the preset's role decides which** — because the two roles
+publish to different places.
+
+**`-site`: `--out` is the content repo's root.** It is resolved exactly the way `--path` is —
+against the working directory when relative, falling back to the `surveyjs-site-data` sibling
+checkout when omitted — and **the product's folder inside it is derived from the preset**:
+
+| Preset | Writes into |
+| --- | --- |
+| `library-site` | `<out>/DocsLibrary` |
+| `creator-site` | `<out>/DocsEditor` |
+| `analytics-site` | `<out>/DocsAnalytics` |
+| `pdf-site` | `<out>/DocsPdf` |
+
+So every `-site` preset takes the *same* `--out`, and none of them names a subfolder:
+
+```bash
+survey-utils generate-doc library-site --path .../survey-library --out .../surveyjs-site-data
+survey-utils generate-doc creator-site --path .../survey-creator --out .../surveyjs-site-data
+```
+
+Those folder names belong to the **site**, not to the products — survey-creator is published as
+`DocsEditor` — which is exactly why a pipeline should not have to know them. They live in
+[paths.json](paths.json) under `site.docs`.
+
+**`-build` and a plain `generate-doc` run: `--out` writes inside the product.** It keeps the
+older rule — resolved against `--path`, defaulting to the documented package's own `docs` folder
+— because that is what it names: a folder in the product repo.
+
+```bash
+# survey-core's own build step: --out is a path inside the repo --path names
+survey-utils generate-doc library-build --path ../.. --out ./packages/survey-core/build
+```
+
+The **design-token topics are not under a docs folder at all** — they are siblings of them,
+`Docs/complete-design-token-list.md` in the content repo root — so `library-site` keeps both roots
+and fills them there.
+
+## 🧭 The path defaults (paths.json)
+
+Everything *inside* those two roots is declared in **[paths.json](paths.json)** at the root of this
+repo:
+
+```jsonc
+{
+  // Relative to --path: the root of the product's checkout.
+  "product": {
+    "theme": "packages/survey-core/src/default-theme/base-theme.ts"
+  },
+  "site": {
+    // The checkout --out defaults to, looked up next to survey-utils.
+    "repo": "surveyjs-site-data",
+
+    // Where each product's -site preset writes, relative to --out.
+    "docs": {
+      "library": "DocsLibrary",
+      "creator": "DocsEditor",
+      "analytics": "DocsAnalytics",
+      "pdf": "DocsPdf"
+    },
+
+    // Topics filled from the product sources. Siblings of the docs folders, not inside them.
+    "tokenTopics": ["Docs/complete-design-token-list.md"],
+
+    // Inside a product's docs folder.
+    "apiReference": "api-reference",
+    "llmGuide": "llms"
+  }
+}
+```
+
+**Why a file rather than options.** None of these is a decision a caller makes — they are facts of
+two repos' layouts, and a caller who has said `--path` and `--out` has already said everything it
+knows. Spelling them out at the command line only spreads one layout across every pipeline that
+runs the tool, so the day the topic is renamed, the theme moves or a docs folder is renamed, every
+one of those pipelines has to be found and edited. Kept here, the layout change is a commit to
+this repo and a release; the CI/CD definitions stay `--path X --out Y` and follow along.
+
+That is also why **`--theme` is gone**. It named the file that `product.theme` now names, and
+there was never a second theme to point it at: `base-theme.ts` is generated from the design system
+upstream, and every other theme in survey-core only overrides parts of it, so the complete list of
+tokens and their defaults is there and nowhere else. Passing it in was a way to get it wrong.
+
+And it is why the site folders moved out of `--out`. The pipeline used to say
+`--out .../surveyjs-site-data/DocsLibrary`, which put the site's own naming into every script that
+publishes to it and made `--out` mean the repo in one command and a folder inside it in the next.
+It is derived from the preset now, and `site.docs` is the one place the mapping lives.
+
+A missing or malformed `paths.json` is reported as a broken install, naming the key that is wrong
+— it ships in the package's `files`, so an install that lacks it is incomplete rather than
+misconfigured.
+
 ## 🔨 Build and test
 
 ```bash
@@ -146,6 +251,7 @@ npm test           # jest + ts-jest, over tests/
 node ./dist/cli.js translate library
 node ./dist/cli.js check-strings creator --list-dead
 node ./dist/cli.js generate-doc library --md
+node ./dist/cli.js generate-doc library-site    # both roots default to the sibling checkouts
 ```
 
 The `npm run translate`, `npm run check:unused-strings` and `npm run generate-doc` scripts are
@@ -388,6 +494,10 @@ root with their original `surveyjs-doc-generator` signatures (`generateDocumenta
 `doc_generator/*.js` wrapper in the same step. The bin is the supported route; the exports exist
 for that one migration step.
 
+`paths()`, `themePath()`, `tokenTopicPaths()`, `siteDocsDir()`, `apiReferenceDir()`,
+`llmGuideDir()` and `siteRoot()` are exported for the same reason: a consumer that drives the generators directly
+resolves the layout the way the bin does, rather than restating it.
+
 ## 🧹 Unused-String Check (loc-lint)
 
 ```bash
@@ -592,19 +702,24 @@ the flags — and the exact set of artifacts a build or a site publish produces 
 ([cli.ts](src/cli.ts)) rather than in a script that could drift from it. Each product has two:
 
 ```bash
-survey-utils generate-doc library-site  --path ../survey-library
-survey-utils generate-doc creator-site  --path ../survey-creator
+survey-utils generate-doc library-site --path ../survey-library --out ../surveyjs-site-data
+survey-utils generate-doc creator-site --path ../survey-creator --out ../surveyjs-site-data
 ```
 
 Presets take **only `--path` and `--out`**; every other option is ignored — the preset decides
-the emitters, so there is nothing else to select. `--out` defaults to the product's docs folder,
-exactly as it does for a plain `generate-doc` run.
+the emitters, so there is nothing else to select. What `--out` *means* depends on the role:
+`-site` takes the content repo's root and derives the product's folder inside it, `-build` takes a
+path inside the product. See [`--out`](#-out-dir--where-the-generated-files-go); the folder names
+and subfolders both come from [paths.json](paths.json).
+
+`library-site` also fills the site's [design-token tables](#-design-token-tables-part-of-library-site)
+— they come from the same survey-core build as the rest, so they are part of the same publish.
 
 | Preset | Emits |
 | --- | --- |
 | `library-build` | `llms.txt` (copied from survey-utils' `static/llms.txt`) and `surveyjs_definition.json` in `<out>`, and `survey-json-authoring.md` in `<out>/llms` |
-| `library-site` | `classes.json`, `pmes.json` and `surveyjs_definition.json` in `<out>`, `survey-json-authoring.md` in `<out>/llms`, and the Markdown API reference in `<out>/api-reference` |
-| `creator-site`, `pdf-site`, `analytics-site` | `classes.json` and `pmes.json` in `<out>`, and the Markdown API reference in `<out>/api-reference` |
+| `library-site` | In `<out>/DocsLibrary`: `classes.json`, `pmes.json`, `surveyjs_definition.json`, `llms/survey-json-authoring.md` and the Markdown API reference in `api-reference/`. Plus the design-token tables of `<out>/Docs/…` |
+| `creator-site`, `pdf-site`, `analytics-site` | In `<out>/DocsEditor`, `<out>/DocsPdf`, `<out>/DocsAnalytics`: `classes.json`, `pmes.json` and the Markdown API reference in `api-reference/` |
 | `creator-build`, `pdf-build`, `analytics-build` | Nothing — a no-op (see below) |
 
 The two roles: **`-build`** is the artifacts shipped inside the product's npm package;
@@ -705,23 +820,36 @@ explained ways, with no member gained or lost:
 Regenerate the baseline before changing anything in `src/doc-gen/`: a doc model with *fewer*
 properties than the previous one means a `ts.*` API changed under you again.
 
-## 🎨 Design-token tables (token-tables)
+## 🎨 Design-token tables (part of `library-site`)
 
 The published token reference — the *Complete Design Token List* topic on surveyjs.io — lists
 roughly a thousand `--sjs2-*` component tokens and the value each one defaults to. Both facts
-live in survey-core's `packages/survey-core/src/default-theme/base-theme.ts`, which is generated
-from the design system upstream and changes with it. `token-tables` copies them into the topic,
-so the page is a view of the theme rather than a transcript of it that goes stale quietly.
+live in survey-core's default theme, which is generated from the design system upstream and
+changes with it, so the topic is filled from the theme rather than retyped and going stale
+quietly.
+
+**It is not a command of its own.** `generate-doc library-site` fills the tables as the last step
+of the same run that writes the API reference, the schema and the authoring guide:
 
 ```bash
-survey-utils token-tables ../surveyjs-site-data/Docs/complete-design-token-list.md
-
-# the theme is not in a sibling checkout
-survey-utils token-tables Docs/complete-design-token-list.md --path ../survey-library
-
-# CI: fail when the topic no longer matches the theme
-survey-utils token-tables Docs/complete-design-token-list.md --check
+survey-utils generate-doc library-site --path ../survey-library --out ../surveyjs-site-data
 ```
+
+```
+DocsLibrary/                         <- classes.json, pmes.json, the schema, api-reference/, llms/
+Docs/complete-design-token-list.md   <- the tables, filled in place
+```
+
+The two used to be separate commands, and that was the problem: the API reference, the schema and
+the guide come from a survey-core **build**, and the token list comes from the theme **in that
+same build**. Run apart, they could be pointed at two different checkouts, or one could be
+forgotten — and the site would describe two versions of survey-core with nothing saying so. Run
+together, the roots are settled once and neither can drift.
+
+Which topics get filled is `site.tokenTopics` in [paths.json](paths.json), resolved against
+`--out` — beside the docs folders, not inside one. A topic the checkout has not got yet is
+reported and skipped: a branch that has not picked it up is a normal state of an upstream repo,
+not a reason to fail a documentation build that otherwise succeeded.
 
 ### The topic asks; the command answers
 
@@ -753,64 +881,33 @@ few tokens are named for a component and nothing else — `--sjs2-radius-compone
 corner radius of every action, and the whole `--sjs2-radius-component-*` family would otherwise
 be documented nowhere.
 
-### From a package.json
+### From a CI pipeline
 
-`token-tables` is the one command that spans two repos: the ids are in **surveyjs-site-data**
-and the values are in **survey-library**. Whichever package.json runs it, both have to be in
-hand — which is what `--path` (or `--theme`) is for.
+The tables span two repos — the ids are in **surveyjs-site-data**, the values are in
+**survey-library** — and both are already in hand, because they are the same two roots the docs
+need. So the publish step is the doc step:
 
-The topic is content, and the thing that makes it stale is a theme change, so the script belongs
-where the theme is:
-
-```jsonc
-// survey-library/packages/survey-core/package.json
-{
-  "scripts": {
-    // The working directory is survey-core, so the default theme is found without --path and
-    // only the topic has to be named. The site content is a sibling checkout of the repo root:
-    // ../../.. is the folder that holds survey-library and surveyjs-site-data.
-    "token_tables": "survey-utils token-tables ../../../surveyjs-site-data/Docs/complete-design-token-list.md",
-
-    // CI: exit 1 when the theme moved and the topic did not follow. Same run, no write.
-    "token_tables:check": "npm run token_tables -- --check"
-  }
-}
+```yaml
+- script: npx survey-utils generate-doc library-site
+    --path $(Build.SourcesDirectory)/survey-library
+    --out $(Build.SourcesDirectory)/surveyjs-site-data
 ```
 
-From surveyjs-site-data instead — a content repo with no product under it, so the theme has to be
-named rather than found:
-
-```jsonc
-// surveyjs-site-data/package.json
-{
-  "devDependencies": { "survey-utils": "^1.0.0" },
-  "scripts": {
-    // --path names the survey-library checkout; base-theme.ts is joined onto it.
-    "token_tables": "survey-utils token-tables Docs/complete-design-token-list.md --path ../survey-library",
-
-    // Or point --theme straight at the file, for a CI job that fetches only what it needs.
-    "token_tables:ci": "survey-utils token-tables Docs/complete-design-token-list.md --theme ./.theme/base-theme.ts --check"
-  }
-}
-```
-
-From this checkout, with survey-library beside it, neither is needed:
-
-```bash
-npm run build
-npm run token-tables -- ../surveyjs-site-data/Docs/complete-design-token-list.md
-```
+**survey-core must be built first**, as for any `library-site` run: the schema is
+`Serializer.generateSchema()` and the guide's question types come from the same bundle. The theme
+is read from the sources, so a missing build is reported before anything is written.
 
 ### Keeping the tables current
 
-The placeholders survive the rewrite, so the command is idempotent and re-running it is the whole
-of "sync the tables": a token added upstream appears in the table its own name puts it in, a
-removed one leaves, and a changed value changes in one cell. Rows keep the theme's declaration
-order rather than being sorted, so a diff shows the token change and nothing else — sorting would
+The placeholders survive the rewrite, so the fill is idempotent and re-running it is the whole of
+"sync the tables": a token added upstream appears in the table its own name puts it in, a removed
+one leaves, and a changed value changes in one cell. Rows keep the theme's declaration order
+rather than being sorted, so a diff shows the token change and nothing else — sorting would
 reshuffle neighbouring rows on every insert and bury it.
 
-`--check` is the same run without the write: it exits `1` and names the topics that differ, which
-is the form a docs CI job wants after a theme bump.
+There is no staleness check to run any more, and nothing to check: the tables are refilled by
+every site publish, from the same build the rest of the artifacts come from. The old
+`token-tables --check` existed because filling them was a separate step that could be skipped.
 
 ### What the Value column says
 

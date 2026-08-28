@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as JSON5 from "json5";
 import { PathError, productRoot } from "../paths";
+import { PATHS_FILE, themePath } from "../site-paths";
 
 /**
  * One CSS custom property the default theme declares, kept in declaration order.
@@ -18,31 +19,28 @@ export interface ThemeToken {
   value: string;
 }
 
-/** The default theme, relative to the survey-library repo root. */
-export const BASE_THEME_PATH =
-  path.join("packages", "survey-core", "src", "default-theme", "base-theme.ts");
+/**
+ * The default theme, relative to the survey-library repo root -- `product.theme` in paths.json.
+ *
+ * Which file inside the repo it is, is not a caller's to name: base-theme.ts is the whole source
+ * of truth for `--sjs2-*`, generated from the design system upstream, and every other theme in
+ * survey-core only overrides parts of it, so the complete list of tokens and their default values
+ * is there and nowhere else. Keeping the path in paths.json means a move upstream is followed by
+ * a release of this repo rather than by an edit to every script that runs the command.
+ */
+export const BASE_THEME_PATH = themePath();
 
 /**
- * The theme file a run reads: `--theme <path>` when the caller named one, survey-library's
- * base-theme.ts otherwise -- found under `--path`, or next to survey-utils like every other
- * command's repo.
- *
- * base-theme.ts is the whole source of truth for `--sjs2-*`: it is generated from the design
- * system upstream and every other theme in survey-core only overrides parts of it, so the
- * complete list of tokens and their default values is there and nowhere else.
+ * The theme file a run reads: survey-library's base-theme.ts, found under `--path`, or next to
+ * survey-utils like every other command's repo.
  */
-export function baseThemeFile(theme?: string, root?: string): string {
-  const file = !!theme
-    ? path.resolve(process.cwd(), theme)
-    : path.join(productRoot("survey-library", root), BASE_THEME_PATH);
+export function baseThemeFile(root?: string): string {
+  const file = path.join(productRoot("survey-library", root), BASE_THEME_PATH);
   if (fs.existsSync(file)) return file;
   throw new PathError(
     `Theme file not found: ${file}\n`
-    + (!!theme
-      ? "--theme names the module that declares the default token values, normally "
-        + BASE_THEME_PATH + " in survey-library."
-      : `Check survey-library out next to survey-utils, name it with --path <dir>, or point `
-        + "--theme <path> at another base-theme.ts.")
+    + "Check survey-library out next to survey-utils, or name its root with --path <dir>.\n"
+    + `The path inside the repo is 'product.theme' in ${PATHS_FILE}.`
   );
 }
 

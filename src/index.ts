@@ -13,9 +13,15 @@ export {
 export { runCheckUnusedStrings } from "./checkUnusedStrings";
 export {
   ThemeToken, TokenTable, TokenTablesResult, readThemeTokens, updateTokenTables,
-  formatTokenValue, runTokenTables
+  formatTokenValue, fillTokenTables
 } from "./token-tables";
 export { setTranslationKey } from "./localization-utils";
+// The relative-path defaults every site command reads, so a consumer that drives the
+// generators directly resolves them the same way the bin does.
+export {
+  Paths, ProductPaths, SitePaths, PATHS_FILE, paths, themePath, tokenTopicPaths,
+  apiReferenceDir, llmGuideDir, siteDocsDir, siteRoot
+} from "./site-paths";
 
 export function translateFile(fileName: string): void {
     new LocalizationUtils().translateFile(fileName, getEnglishJson(fileName), getEnglishTopComments(fileName));

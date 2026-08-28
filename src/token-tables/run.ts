@@ -1,47 +1,27 @@
 import * as fs from "fs";
 import * as path from "path";
-import { resolvePath } from "../paths";
+import { tokenTopicPaths } from "../site-paths";
 import { baseThemeFile, readThemeTokens, ThemeToken } from "./theme";
 import { updateTokenTables } from "./tables";
 
-export class TokenTablesUsageError extends Error { }
-
-interface TokenTablesArgs {
-  /** The topics to rewrite. At least one: the command writes nothing on its own. */
-  files: string[];
-  /** --theme: another base-theme.ts. Absent: survey-library's. */
-  theme?: string;
-  /** --path: the survey-library checkout the default theme is found in. */
+export interface TokenTablesOptions {
+  /** The survey-library checkout the theme is read from. Absent: the sibling checkout. */
   path?: string;
-  /** --check: rewrite in memory and report, without touching the files. */
-  check: boolean;
+  /** The content repo root the topics are joined onto. Absolute. */
+  out: string;
+  /** Fill in memory and report, without touching the files. */
+  check?: boolean;
 }
 
-function parseArgs(args: string[]): TokenTablesArgs {
-  const res: TokenTablesArgs = { files: [], check: false };
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    const value = (): string => {
-      const next = args[++i];
-      if (next === undefined || next.indexOf("--") === 0) {
-        throw new TokenTablesUsageError(arg + " needs a value");
-      }
-      return next;
-    };
-    if (arg === "--theme") res.theme = value();
-    else if (arg === "--path") res.path = value();
-    else if (arg === "--check") res.check = true;
-    else if (arg.indexOf("--") === 0) throw new TokenTablesUsageError("Unknown option: " + arg);
-    else res.files.push(arg);
-  }
-  if (res.files.length === 0) {
-    throw new TokenTablesUsageError(
-      "No file to update: token-tables rewrites the table placeholders inside a Markdown topic, "
-      + "so name the topic.\n\n"
-      + "  survey-utils token-tables ../surveyjs-site-data/Docs/complete-design-token-list.md"
-    );
-  }
-  return res;
+/**
+ * The topics a run fills: paths.json's own, joined onto the content repo root.
+ *
+ * Which topic holds the token tables is a fact of the content repo's layout, not a choice --
+ * a caller that has the repo root in hand has already said everything -- so a publish survives
+ * the topic being renamed or split upstream without an edit anywhere but paths.json.
+ */
+export function topicFiles(out: string): string[] {
+  return tokenTopicPaths().map((topic) => path.resolve(out, topic));
 }
 
 /** The counts a run prints per topic, so a diff that looks wrong can be checked against them. */
@@ -67,29 +47,33 @@ function reportTables(file: string, result: ReturnType<typeof updateTokenTables>
 }
 
 /**
- * `survey-utils token-tables <file...>`: fill the token tables of a Markdown topic from the
- * default theme.
+ * Fill the design-token tables of the site's topics from survey-core's default theme.
  *
- * The topic owns the sections and their ids; the theme owns the tokens and their values. This
- * command is only the join between them, which is why it can be re-run after any theme change
- * and why `--check` is enough for CI: a topic whose tables no longer match the theme fails the
- * check with the tokens that moved named in the diff.
+ * The topic owns the sections and their ids; the theme owns the tokens and their values; this is
+ * only the join between them, which is why re-running it is the whole of "sync the tables".
+ *
+ * It runs as part of `generate-doc library-site` rather than as a command of its own, because it
+ * is the same publish as the rest of the Form Library's site artifacts: the API reference, the
+ * schema and the guide come from a survey-core build, and the token list comes from the theme in
+ * that same build. Two commands could be run against two different checkouts, or one could be
+ * forgotten; one cannot.
+ *
+ * A missing topic is not fatal. The topics are declared here, the site repo is checked out by
+ * whoever runs the publish, and a branch that has not got the topic yet is a normal state of an
+ * upstream repo -- not a reason to fail a documentation build that has otherwise succeeded.
  */
-export function runTokenTables(args: string[]): number {
-  const parsed = parseArgs(args);
-  const themeFile = baseThemeFile(parsed.theme, parsed.path);
+export function fillTokenTables(options: TokenTablesOptions): number {
+  const themeFile = baseThemeFile(options.path);
   const tokens: ThemeToken[] = readThemeTokens(themeFile);
   console.log(`${themeFile}: ${tokens.length} token(s)`);
 
-  const files = parsed.files.map((file) => resolvePath(file));
+  const files = topicFiles(options.out);
   const missing = files.filter((file) => !fs.existsSync(file));
-  if (missing.length > 0) {
-    missing.forEach((file) => console.error("File not found: " + file));
-    return 2;
-  }
+  missing.forEach((file) => console.warn(`warning: no topic at ${file} -- nothing to fill.`));
+  const present = files.filter((file) => fs.existsSync(file));
 
   let changed = 0;
-  files.forEach((file) => {
+  present.forEach((file) => {
     const before = fs.readFileSync(file, "utf8");
     const result = updateTokenTables(before, tokens);
     reportTables(file, result);
@@ -101,14 +85,14 @@ export function runTokenTables(args: string[]): number {
     }
     if (result.text === before) return;
     changed++;
-    if (parsed.check) console.error("differs: " + file);
+    if (options.check) console.error("differs: " + file);
     else fs.writeFileSync(file, result.text);
   });
 
-  if (parsed.check) {
-    console.log(`${files.length} file(s) checked, ${changed} differ from the theme.`);
+  if (options.check) {
+    console.log(`${present.length} topic(s) checked, ${changed} differ from the theme.`);
     return changed > 0 ? 1 : 0;
   }
-  console.log(`${changed} file(s) written.`);
+  console.log(`${changed} topic(s) written.`);
   return 0;
 }

@@ -14,7 +14,10 @@ import {
   docBundle, docEntries, docOut, docProductNames, docProducts, docRoot, SERIALIZER_PRODUCT
 } from "./doc-products";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
-import { BASE_THEME_PATH, runTokenTables, TokenTablesUsageError } from "./token-tables";
+import { fillTokenTables } from "./token-tables";
+import {
+  apiReferenceDir, llmGuideDir, paths, PATHS_FILE, siteDocsDir, siteRoot, tokenTopicPaths
+} from "./site-paths";
 
 /**
  * The emitters, in one place: the usage text lists them, and so does the error a run that
@@ -32,19 +35,28 @@ const EMITTERS = `  --md                      Markdown API docs: <ClassName>.md 
                             SurveyJS JSON it writes loads. Needs survey-core built. Also emits
                             llms.txt, listing the guide and the schema.`;
 
+/**
+ * The site folders the -site presets write into, listed the way the usage text lists them, so a
+ * folder added or renamed in paths.json shows up in --help without an edit here.
+ */
+function presetFolders(): string {
+  const docs = paths().site.docs;
+  return Object.keys(docs)
+    .map((product) => `            ${(product + "-site").padEnd(16)}-> <out>/${docs[product]}`)
+    .join("\n");
+}
+
 const USAGE = `survey-utils <command> [options]
 
 Commands:
   generate-doc [product]    Generate API documentation from a product's TypeScript sources.
   check-strings [product]   Report localization strings no product source reaches any more.
   translate <product>       Translate the localization files of a product.
-  token-tables <file...>    Fill the design-token tables of a documentation topic.
 
-generate-doc, check-strings and translate each take a product and find its folders themselves.
---path <dir> means the same thing in all of them, token-tables included: the root of the
-product's repo -- the folder that holds its package.json, not a folder inside it. Without
---path they look the repo up next to survey-utils (a local SurveyJS checkout, where
-survey-utils sits beside survey-library, survey-creator, survey-analytics), except that
+Each takes a product and finds its folders itself. --path <dir> means the same thing in all of
+them: the root of the product's repo -- the folder that holds its package.json, not a folder
+inside it. Without --path they look the repo up next to survey-utils (a local SurveyJS checkout,
+where survey-utils sits beside survey-library, survey-creator, survey-analytics), except that
 generate-doc uses the working directory first, so a product calling the bin from its own
 package.json needs no --path.
 
@@ -54,28 +66,65 @@ survey-utils generate-doc <preset> [--path <dir>] [--out <dir>]
   PDF Generator or the Dashboard -- so a release script names one instead of listing flags. They
   take only --path and --out; every other option is ignored.
 
+  The two modes mean different things by --out, because they publish to different places:
+
+  -build  writes inside the product. --out is resolved against --path and defaults to the
+          package's own docs folder, exactly as a plain generate-doc run's does.
+  -site   writes into the content repo. --out is that repo's ROOT, resolved like --path and
+          defaulting to the ${paths().site.repo} checkout next to survey-utils. The product's
+          folder inside it is the preset's to know:
+
+${presetFolders()}
+
+          so a pipeline passes the same --out to every -site preset, and none of them names a
+          subfolder:
+
+            survey-utils generate-doc library-site --path .../survey-library --out .../${paths().site.repo}
+            survey-utils generate-doc creator-site --path .../survey-creator --out .../${paths().site.repo}
+
   library-build             The artifacts shipped inside the survey-core npm package:
                             llms.txt (copied from survey-utils' static/llms.txt) and
                             surveyjs_definition.json in <out>, and survey-json-authoring.md
-                            in <out>/llms.
-  library-site              The artifacts the website serves: classes.json, pmes.json and
-                            surveyjs_definition.json in <out>, survey-json-authoring.md in
-                            <out>/llms, and the Markdown API reference in <out>/api-reference.
+                            in <out>/${llmGuideDir()}.
+  library-site              The artifacts the website serves, in <out>/${siteDocsDir("library")}:
+                            classes.json, pmes.json and surveyjs_definition.json, the authoring
+                            guide in ${llmGuideDir()}/ and the Markdown API reference in
+                            ${apiReferenceDir()}/. It also fills the design-token tables of the
+                            site's topics (see below), because those come from the same
+                            survey-core build as the rest.
   creator-build             Nothing: Survey Creator ships no generated doc artifacts in its
                             package, so this preset is a no-op kept for symmetry with the others.
-  creator-site             The artifacts the website serves for Survey Creator: classes.json and
-                            pmes.json in <out>, and the Markdown API reference in <out>/api-reference.
-                            Creator has no built bundle, so there is no schema or LLM guide.
+  creator-site              The artifacts the website serves for Survey Creator, in
+                            <out>/${siteDocsDir("creator")}: classes.json, pmes.json and the
+                            Markdown API reference. Creator has no built bundle, so there is no
+                            schema and no LLM guide.
   pdf-build                 Nothing: the PDF Generator ships no generated doc artifacts in its
                             package, so this preset is a no-op kept for symmetry with the others.
-  pdf-site                 The artifacts the website serves for the PDF Generator: classes.json and
-                            pmes.json in <out>, and the Markdown API reference in <out>/api-reference.
-                            The PDF Generator has no built bundle, so there is no schema or LLM guide.
+  pdf-site                  The artifacts the website serves for the PDF Generator, in
+                            <out>/${siteDocsDir("pdf")}: classes.json, pmes.json and the Markdown
+                            API reference. No built bundle, so no schema and no LLM guide.
   analytics-build           Nothing: the Dashboard ships no generated doc artifacts in its package,
                             so this preset is a no-op kept for symmetry with the others.
-  analytics-site           The artifacts the website serves for the Dashboard: classes.json and
-                            pmes.json in <out>, and the Markdown API reference in <out>/api-reference.
-                            The Dashboard has no built bundle, so there is no schema or LLM guide.
+  analytics-site            The artifacts the website serves for the Dashboard, in
+                            <out>/${siteDocsDir("analytics")}: classes.json, pmes.json and the
+                            Markdown API reference. No built bundle, so no schema and no LLM guide.
+
+  The design-token tables, filled by library-site:
+
+  The published token reference lists every --sjs2-* component token and the value it defaults
+  to. Both facts live in survey-core's default theme, so the topic is filled from it rather than
+  retyped. A topic marks each table with a placeholder whose id is the query that fills it:
+
+    <div id="-component-action-">
+    ...replaced by every token with -component-action- in its name...
+    </div>
+
+  Several queries are separated by '|'. The ids live in the topic, so which tokens a section
+  lists is the topic's to decide and nothing here has to be edited to follow it. The
+  placeholders survive the rewrite, so re-running is how the tables track a theme that gained,
+  lost or re-valued a token. Which topics are filled is 'site.tokenTopics' in paths.json
+  (${tokenTopicPaths().join(", ")}), resolved against <out> -- beside the docs folders, not
+  inside one. A topic the checkout has not got is reported and skipped, not failed on.
 
 survey-utils generate-doc [product] [options]
 
@@ -145,28 +194,6 @@ survey-utils translate <product> [--key <key>] [--path <dir>]
   --path <dir>              Repo root of the product. The product's localization folder is
                             joined onto it (library -> packages/survey-core/src/localization).
 
-survey-utils token-tables <file...> [--theme <path>] [--path <dir>] [--check]
-
-  Fills the design-token tables of a Markdown topic from survey-core's default theme.
-
-  A topic marks each table with a placeholder whose id is the query that fills it:
-
-    <div id="-component-action-">
-    ...replaced by every token with -component-action- in its name...
-    </div>
-
-  Several queries are separated by '|'. The ids live in the topic, so which tokens a section
-  lists is the topic's to decide and this command never has to be edited to follow it. The
-  placeholders survive the rewrite, so re-running is how the tables track a theme that gained,
-  lost or re-valued a token.
-
-  <file...>                 The topics to fill. Rewritten in place.
-  --theme <path>            The module that declares the token values, resolved against the
-                            working directory. Default: ${BASE_THEME_PATH.replace(/\\/g, "/")}
-                            in survey-library.
-  --path <dir>              Root of the survey-library checkout the default theme is found in.
-  --check                   Fill in memory, compare against what is on disk, exit 1 if they
-                            differ -- the CI form of "the tables are up to date".
 `;
 
 interface DocArgs {
@@ -436,10 +463,37 @@ function staticLlmsTxt(): string {
   return fs.readFileSync(path.join(__dirname, "..", "static", "llms.txt"), "utf8");
 }
 
+/**
+ * Where a preset writes.
+ *
+ * The two modes mean different things by `--out`, because they publish to different places.
+ * **-build** writes inside the product -- `--out ./packages/survey-core/build` is survey-core's
+ * own build step -- so it keeps the rule every other generate-doc run has: a path resolved
+ * against `--path`, defaulting to the package's docs folder.
+ *
+ * **-site** writes into the content repo, so `--out` is that repo's root, resolved like `--path`
+ * and defaulting to the sibling checkout. The product's own folder inside it -- DocsLibrary,
+ * DocsEditor -- is the preset's to know: it is named after the site rather than after the
+ * product, so spelling it out at the command line only put the site's naming into every pipeline
+ * that publishes to it, and made `--out` mean the repo in one command and a folder inside it in
+ * the next.
+ */
+function presetOut(
+  product: string, mode: "build" | "site", args: PresetArgs, root: string
+): { out: string; content?: string } {
+  if (mode === "build") {
+    return { out: path.resolve(root, !!args.out ? args.out : docOut(product, root)) };
+  }
+  // The content root is kept alongside the product's folder in it: the docs go in DocsLibrary,
+  // but the topics whose token tables are filled are siblings of it, not inside it.
+  const content = siteRoot(args.out);
+  return { out: path.join(content, siteDocsDir(product)), content: content };
+}
+
 function runPreset(preset: Preset, args: PresetArgs): number {
   const { product, mode } = presetParts(preset);
   const root = docRoot(product, args.path);
-  const out = path.resolve(root, !!args.out ? args.out : docOut(product, root));
+  const { out, content } = presetOut(product, mode, args, root);
   const entries = docEntries(product, root);
   const docProduct = docProducts[product].docProduct;
   console.log(
@@ -447,7 +501,7 @@ function runPreset(preset: Preset, args: PresetArgs): number {
   );
 
   return product === SERIALIZER_PRODUCT
-    ? runLibraryPreset(mode, args, root, entries, out, docProduct)
+    ? runLibraryPreset(mode, args, root, entries, out, docProduct, content)
     : runBundlelessPreset(preset, mode, entries, out, docProduct, root);
 }
 
@@ -459,7 +513,7 @@ function runPreset(preset: Preset, args: PresetArgs): number {
  */
 function runLibraryPreset(
   mode: "build" | "site", args: PresetArgs, root: string, entries: string[], out: string,
-  docProduct: string
+  docProduct: string, content?: string
 ): number {
   const bundle = loadDocBundle(
     { ...emptyDocArgs(), product: SERIALIZER_PRODUCT, path: args.path, jsonDefinition: "runtime", llmGuide: true },
@@ -481,7 +535,7 @@ function runLibraryPreset(
   // it), so only the guide file is kept.
   const guide = buildLLMGuide(model, <any>bundle, {
     outputDir: out,
-    guideOutputDir: path.join(out, "llms"),
+    guideOutputDir: path.join(out, llmGuideDir()),
     fileNames: entries,
     product: docProduct
   });
@@ -504,12 +558,19 @@ function runLibraryPreset(
     Object.assign(files, buildMDFiles(model.classes, model.pmes, {
       product: docProduct,
       fileNames: entries,
-      outputDir: path.join(out, "api-reference")
+      outputDir: path.join(out, apiReferenceDir())
     }));
   }
 
   const written = writeFiles(files);
   console.log(`${written.length} file(s) written.`);
+
+  // The token tables are the rest of the same publish: the API reference, the schema and the
+  // guide come from this survey-core build, and the token list comes from the theme in it. They
+  // are filled here rather than by a second command so that the two cannot be run against
+  // different checkouts, and so that one cannot be forgotten. The topics sit beside the docs
+  // folder in the content repo, not inside it, which is why the content root is passed down.
+  if (mode === "site" && !!content) return fillTokenTables({ path: args.path, out: content });
   return 0;
 }
 
@@ -536,7 +597,7 @@ function runBundlelessPreset(
   Object.assign(files, buildMDFiles(model.classes, model.pmes, {
     product: docProduct,
     fileNames: entries,
-    outputDir: path.join(out, "api-reference")
+    outputDir: path.join(out, apiReferenceDir())
   }));
 
   const written = writeFiles(files);
@@ -570,7 +631,7 @@ function generateDoc(args: DocArgs): number {
   // Without --out the docs go to the package they document -- packages/survey-core/docs whether
   // the run started at the repo root or in the package itself, so both write the same folder.
   const out = at(!!args.out ? args.out : docOut(args.product, root));
-  const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, "api-reference");
+  const mdOut = !!args.mdOut ? at(args.mdOut) : path.join(out, apiReferenceDir());
 
   const bundle = loadDocBundle(args, root);
   const serializer = bundle ? bundle.Serializer : null;
@@ -599,7 +660,7 @@ function generateDoc(args: DocArgs): number {
     if (args.llmGuide) {
       const guide = buildLLMGuide(model, <any>bundle, {
         outputDir: out,
-        guideOutputDir: at(!!args.guideOut ? args.guideOut : "llms"),
+        guideOutputDir: at(!!args.guideOut ? args.guideOut : llmGuideDir()),
         fileNames: entries,
         product: docProduct,
         sourceBaseUrl: args.sourceBaseUrl,
@@ -649,9 +710,6 @@ function main(): void {
     if (command === "check-strings") {
       process.exit(runCheckUnusedStrings(argv.slice(1)));
     }
-    if (command === "token-tables") {
-      process.exit(runTokenTables(argv.slice(1)));
-    }
     if (command === "translate") {
       // No process.exit on success: the translation requests are still in flight, and
       // exiting would kill them. Node ends the process once the event loop drains.
@@ -667,8 +725,7 @@ function main(): void {
       console.error(error.message);
       process.exit(2);
     }
-    const usage = error instanceof UsageError || error instanceof TranslateUsageError
-      || error instanceof TokenTablesUsageError;
+    const usage = error instanceof UsageError || error instanceof TranslateUsageError;
     console.error(usage ? String(error.message) : String(error instanceof Error ? error.stack : error));
     // A self-contained usage error listed what the caller has to choose from: appending the
     // whole usage text below it would only push that list off the screen.
