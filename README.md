@@ -753,6 +753,54 @@ few tokens are named for a component and nothing else — `--sjs2-radius-compone
 corner radius of every action, and the whole `--sjs2-radius-component-*` family would otherwise
 be documented nowhere.
 
+### From a package.json
+
+`token-tables` is the one command that spans two repos: the ids are in **surveyjs-site-data**
+and the values are in **survey-library**. Whichever package.json runs it, both have to be in
+hand — which is what `--path` (or `--theme`) is for.
+
+The topic is content, and the thing that makes it stale is a theme change, so the script belongs
+where the theme is:
+
+```jsonc
+// survey-library/packages/survey-core/package.json
+{
+  "scripts": {
+    // The working directory is survey-core, so the default theme is found without --path and
+    // only the topic has to be named. The site content is a sibling checkout of the repo root:
+    // ../../.. is the folder that holds survey-library and surveyjs-site-data.
+    "token_tables": "survey-utils token-tables ../../../surveyjs-site-data/Docs/complete-design-token-list.md",
+
+    // CI: exit 1 when the theme moved and the topic did not follow. Same run, no write.
+    "token_tables:check": "npm run token_tables -- --check"
+  }
+}
+```
+
+From surveyjs-site-data instead — a content repo with no product under it, so the theme has to be
+named rather than found:
+
+```jsonc
+// surveyjs-site-data/package.json
+{
+  "devDependencies": { "survey-utils": "^1.0.0" },
+  "scripts": {
+    // --path names the survey-library checkout; base-theme.ts is joined onto it.
+    "token_tables": "survey-utils token-tables Docs/complete-design-token-list.md --path ../survey-library",
+
+    // Or point --theme straight at the file, for a CI job that fetches only what it needs.
+    "token_tables:ci": "survey-utils token-tables Docs/complete-design-token-list.md --theme ./.theme/base-theme.ts --check"
+  }
+}
+```
+
+From this checkout, with survey-library beside it, neither is needed:
+
+```bash
+npm run build
+npm run token-tables -- ../surveyjs-site-data/Docs/complete-design-token-list.md
+```
+
 ### Keeping the tables current
 
 The placeholders survive the rewrite, so the command is idempotent and re-running it is the whole
