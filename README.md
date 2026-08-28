@@ -2,19 +2,20 @@
 
 Build-time tooling for the SurveyJS repos, behind one bin: **`survey-utils`**.
 
-Three commands, each solving a problem that used to be a per-repo script:
+Four commands, each solving a problem that used to be a per-repo script:
 
 | Command | What it does |
 | --- | --- |
 | `translate <product>` | Sends every not-yet-translated string in a product's locale files to the Azure Translator API and writes the result back, keeping the files' comments and structure. |
 | `check-strings [product]` | Reports localization strings that no product source reaches any more, and exits `1` so CI fails when a newly added string is never used. |
 | `generate-doc [product]` | Generates the API docs, the survey JSON Schema and the LLM authoring guide from a product's TypeScript sources and built bundle. |
+| `token-tables <file...>` | Fills the design-token tables of a documentation topic from survey-core's default theme, so the published token list tracks the theme instead of being retyped. |
 
 ```bash
 survey-utils help      # the full option list
 ```
 
-**All three take a product and find its folders themselves.** Nothing about a repo's layout is
+**The first three take a product and find its folders themselves.** Nothing about a repo's layout is
 typed at the command line: `translate` knows where a product keeps its locale files,
 `check-strings` knows its source roots, and `generate-doc` knows the entry files its docs are
 built from — survey-core is documented from `entries/chunks/model.ts`, survey-pdf from
@@ -25,13 +26,15 @@ Products: **`library`** (survey-core), **`creator`** (survey-creator-core), **`a
 (survey-analytics, also accepted as `dashboard`), **`pdf`** (survey-pdf, docs only), and
 **`creator-presets`** (the creator's UI presets, `translate` only). Each is described in full
 under [Using it from a product's package.json](#-using-it-from-a-products-packagejson).
+`token-tables` takes files rather than a product — it writes into the site's content repo, not
+into a product — but it reads survey-library the same way, so `--path` means the same thing there.
 
 ## 📁 Structure
 
 ```
 survey-utils/
 ├── src/
-│   ├── cli.ts                  # The `survey-utils` bin: translate, check-strings, generate-doc
+│   ├── cli.ts                  # The bin: translate, check-strings, generate-doc, token-tables
 │   ├── index.ts                # Package exports (see "The package exports" below)
 │   ├── paths.ts                # What --path means: the repo root, for every command
 │   ├── doc-products.ts         # generate-doc: product -> repo, entry files, front-matter name
@@ -42,6 +45,11 @@ survey-utils/
 │   ├── translateAnalytics.ts
 │   ├── localization-utils.ts   # Locale-file parsing: JSON + comment extraction, Azure calls
 │   ├── checkUnusedStrings.ts   # check-strings: argument parsing, reporting, exit code
+│   ├── token-tables/           # token-tables: the design-token tables of a doc topic
+│   │   ├── theme.ts            #   reads base-theme.ts as data: every --sjs2-* and its value
+│   │   ├── tables.ts           #   the <div id="..."> placeholders and what each one matches
+│   │   ├── value.ts            #   how a value is written in the Value column
+│   │   └── run.ts              #   argument parsing, the per-table report, --check
 │   ├── loc-lint/               # The unused-string check itself
 │   │   ├── inventory.ts        #   every key in a product's locale file
 │   │   ├── literals.ts         #   string literals in the product's TS sources (parsed, not grepped)
@@ -59,6 +67,7 @@ survey-utils/
 │   ├── translation_utils.test.ts
 │   ├── loc-lint.test.ts
 │   ├── paths.test.ts           # --path and entry resolution
+│   ├── token-tables.test.ts    # placeholder matching, value formatting, idempotency
 │   ├── doc-products.test.ts    # product -> repo + entries, and the roots it refuses
 │   └── doc-gen/                # Doc-generator specs + fixtures
 ├── allowlists/                 # Known-dynamic and known-dead strings, one file per product
@@ -71,7 +80,7 @@ survey-utils/
 
 ## 📍 `--path <dir>` — where the repo is
 
-`--path` means **one thing in all three commands: the root of the product's repo** — the folder
+`--path` means **one thing in all four commands: the root of a product's repo** — the folder
 that holds its `package.json`, not a folder inside it. Each command joins its own subfolders onto
 that root, so nothing else about the layout has to be typed:
 
@@ -86,6 +95,7 @@ survey-utils generate-doc  library --md --path ../../LibV3/survey-library
 | `check-strings` | The locale file, the source roots and the built bundle (`packages/survey-core/…`). Only `allowlists/<product>.json` stays in survey-utils. |
 | `translate` | The product's localization folder (`library` → `packages/survey-core/src/localization`). |
 | `generate-doc` | The product's entry files (`library` → `packages/survey-core/entries/chunks/model.ts`), and every relative path the caller passed: `--serializer`, `--out`, `--md-out`. |
+| `token-tables` | survey-core's default theme (`packages/survey-core/src/default-theme/base-theme.ts`). It is always survey-library's, so this is the one command whose `--path` needs no product to go with it. |
 
 Without `--path`, `translate` and `check-strings` expect the SurveyJS repos to sit **side by
 side** — the folder that holds `survey-utils` also holds `survey-library`, `survey-creator`,
@@ -694,6 +704,100 @@ explained ways, with no member gained or lost:
 
 Regenerate the baseline before changing anything in `src/doc-gen/`: a doc model with *fewer*
 properties than the previous one means a `ts.*` API changed under you again.
+
+## 🎨 Design-token tables (token-tables)
+
+The published token reference — the *Complete Design Token List* topic on surveyjs.io — lists
+roughly a thousand `--sjs2-*` component tokens and the value each one defaults to. Both facts
+live in survey-core's `packages/survey-core/src/default-theme/base-theme.ts`, which is generated
+from the design system upstream and changes with it. `token-tables` copies them into the topic,
+so the page is a view of the theme rather than a transcript of it that goes stale quietly.
+
+```bash
+survey-utils token-tables ../surveyjs-site-data/Docs/complete-design-token-list.md
+
+# the theme is not in a sibling checkout
+survey-utils token-tables Docs/complete-design-token-list.md --path ../survey-library
+
+# CI: fail when the topic no longer matches the theme
+survey-utils token-tables Docs/complete-design-token-list.md --check
+```
+
+### The topic asks; the command answers
+
+A table is marked in the topic by a `<div>` whose id is the query that fills it:
+
+```html
+<div id="-component-action-">
+
+| Variable | Value |
+| -------- | ----- |
+| `--sjs2-layout-component-action-xx-small-label-padding-vertical` | spacing-x000 |
+| ...every other token with -component-action- in its name |
+
+</div>
+```
+
+Several queries are separated by `|`, which is how one section covers a family of related
+components:
+
+```html
+<div id="-component-checkbox- | -component-radio- | -component-toggle- | -component-boolean- | -component-buttongroup-item-">
+```
+
+**The ids belong to the topic, not to this repo.** Splitting a section, renaming a component or
+adding one is an edit to the Markdown file; nothing here has to be changed to follow it. The
+trailing dash is load-bearing: it is what keeps `-component-label-` from also claiming every
+`-component-labeled-item-` token. An id also matches a name that *ends* where it does, because a
+few tokens are named for a component and nothing else — `--sjs2-radius-component-action` is the
+corner radius of every action, and the whole `--sjs2-radius-component-*` family would otherwise
+be documented nowhere.
+
+### Keeping the tables current
+
+The placeholders survive the rewrite, so the command is idempotent and re-running it is the whole
+of "sync the tables": a token added upstream appears in the table its own name puts it in, a
+removed one leaves, and a changed value changes in one cell. Rows keep the theme's declaration
+order rather than being sorted, so a diff shows the token change and nothing else — sorting would
+reshuffle neighbouring rows on every insert and bury it.
+
+`--check` is the same run without the write: it exits `1` and names the topics that differ, which
+is the form a docs CI job wants after a theme bump.
+
+### What the Value column says
+
+Values are written the way the hand-written tables higher up the same topic write them — the bare
+token name, with no `var()`, no `--sjs2-` prefix and no backticks, because a column of
+`var(--sjs2-…)` is eleven characters of noise on a page that is entirely about `--sjs2-` tokens.
+
+| Declared in base-theme.ts | In the table |
+| --- | --- |
+| `var(--sjs2-spacing-x025)` | `spacing-x025` |
+| `rgba(from var(--sjs2-color-bg-alert-tertiary) r g b / var(--sjs2-opacity-hidden))` | `color-bg-alert-tertiary, opacity-hidden` |
+| `calc(var(--sjs2-spacing-large-vertical) * 2)` | `calc(spacing-large-vertical * 2)` |
+| `inset var(--sjs2-border-offset-x-form-default) …` | `inset border-offset-x-form-default …` |
+| `transparent` | `transparent` |
+| (empty) | `&mdash;` |
+
+A lone reference and a color-at-an-opacity get a form of their own because the semantic tables
+already gave them one. Everything else keeps its CSS structure and only loses the `var()`
+wrappers: a composite border effect stays recognizable as the five primitives it is made of.
+Rewriting those into prose would mean guessing which part matters, and a generated table is the
+wrong place to guess.
+
+### What it reports
+
+Every run prints the row count per table, and warns about the two ways a topic and a theme can
+drift apart:
+
+- **an id that matches nothing** — a typo, or a component renamed upstream. The table still
+  generates, with a header and no rows, which reads on the page as "this component has no
+  tokens"; the warning says the run has no way to know that is true.
+- **component tokens no table claims** — declared by the theme and listed nowhere. Ten of them
+  today: the three `-action-group-gap` tokens of the file upload, image and image picker
+  questions, `--sjs2-size-component-icon-{small,medium,large}`, and the corner radii of the
+  rating, ranking, tooltip and stepper item. Each needs a section in the topic, or an existing
+  id widened to cover it.
 
 ## 📄 License
 

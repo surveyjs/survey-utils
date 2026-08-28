@@ -11,6 +11,10 @@ export {
   DocEntry, DocEntryType, DocModel, DocOptions, MDGenerationOptions
 } from "./doc-gen";
 export { runCheckUnusedStrings } from "./checkUnusedStrings";
+export {
+  ThemeToken, TokenTable, TokenTablesResult, readThemeTokens, updateTokenTables,
+  formatTokenValue, runTokenTables
+} from "./token-tables";
 export { setTranslationKey } from "./localization-utils";
 
 export function translateFile(fileName: string): void {

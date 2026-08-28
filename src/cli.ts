@@ -14,6 +14,7 @@ import {
   docBundle, docEntries, docOut, docProductNames, docProducts, docRoot, SERIALIZER_PRODUCT
 } from "./doc-products";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
+import { BASE_THEME_PATH, runTokenTables, TokenTablesUsageError } from "./token-tables";
 
 /**
  * The emitters, in one place: the usage text lists them, and so does the error a run that
@@ -37,13 +38,15 @@ Commands:
   generate-doc [product]    Generate API documentation from a product's TypeScript sources.
   check-strings [product]   Report localization strings no product source reaches any more.
   translate <product>       Translate the localization files of a product.
+  token-tables <file...>    Fill the design-token tables of a documentation topic.
 
-All three take a product and find its folders themselves. --path <dir> means the same thing
-in all three: the root of the product's repo -- the folder that holds its package.json, not a
-folder inside it. Without --path they look the repo up next to survey-utils (a local SurveyJS
-checkout, where survey-utils sits beside survey-library, survey-creator, survey-analytics),
-except that generate-doc uses the working directory first, so a product calling the bin from
-its own package.json needs no --path.
+generate-doc, check-strings and translate each take a product and find its folders themselves.
+--path <dir> means the same thing in all of them, token-tables included: the root of the
+product's repo -- the folder that holds its package.json, not a folder inside it. Without
+--path they look the repo up next to survey-utils (a local SurveyJS checkout, where
+survey-utils sits beside survey-library, survey-creator, survey-analytics), except that
+generate-doc uses the working directory first, so a product calling the bin from its own
+package.json needs no --path.
 
 survey-utils generate-doc <preset> [--path <dir>] [--out <dir>]
 
@@ -141,6 +144,29 @@ survey-utils translate <product> [--key <key>] [--path <dir>]
                             from TRANSLATION_API_KEY (environment or .env); --key wins.
   --path <dir>              Repo root of the product. The product's localization folder is
                             joined onto it (library -> packages/survey-core/src/localization).
+
+survey-utils token-tables <file...> [--theme <path>] [--path <dir>] [--check]
+
+  Fills the design-token tables of a Markdown topic from survey-core's default theme.
+
+  A topic marks each table with a placeholder whose id is the query that fills it:
+
+    <div id="-component-action-">
+    ...replaced by every token with -component-action- in its name...
+    </div>
+
+  Several queries are separated by '|'. The ids live in the topic, so which tokens a section
+  lists is the topic's to decide and this command never has to be edited to follow it. The
+  placeholders survive the rewrite, so re-running is how the tables track a theme that gained,
+  lost or re-valued a token.
+
+  <file...>                 The topics to fill. Rewritten in place.
+  --theme <path>            The module that declares the token values, resolved against the
+                            working directory. Default: ${BASE_THEME_PATH.replace(/\\/g, "/")}
+                            in survey-library.
+  --path <dir>              Root of the survey-library checkout the default theme is found in.
+  --check                   Fill in memory, compare against what is on disk, exit 1 if they
+                            differ -- the CI form of "the tables are up to date".
 `;
 
 interface DocArgs {
@@ -623,6 +649,9 @@ function main(): void {
     if (command === "check-strings") {
       process.exit(runCheckUnusedStrings(argv.slice(1)));
     }
+    if (command === "token-tables") {
+      process.exit(runTokenTables(argv.slice(1)));
+    }
     if (command === "translate") {
       // No process.exit on success: the translation requests are still in flight, and
       // exiting would kill them. Node ends the process once the event loop drains.
@@ -638,7 +667,8 @@ function main(): void {
       console.error(error.message);
       process.exit(2);
     }
-    const usage = error instanceof UsageError || error instanceof TranslateUsageError;
+    const usage = error instanceof UsageError || error instanceof TranslateUsageError
+      || error instanceof TokenTablesUsageError;
     console.error(usage ? String(error.message) : String(error instanceof Error ? error.stack : error));
     // A self-contained usage error listed what the caller has to choose from: appending the
     // whole usage text below it would only push that list off the screen.
