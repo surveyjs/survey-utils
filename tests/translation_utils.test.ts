@@ -419,3 +419,64 @@ setupLocale({ localeCode: "de", strings: loc });
   const strings4 = utils.getStringsToTranslate(translationText4, englishJSON);
   expect(strings4.length).toBe(0);
 });
+
+test("[Do not translate] marker: marked keys are never queued for machine translation", (): any => {
+  const englishJSON = {
+    a: "aa",
+    b: "bb",
+    maskPlaceholderDay: "d",
+    maskPlaceholderMonth: "m",
+    maskPlaceholderMinute: "M"
+  };
+  const englishComments: Array<ICommentInfo> = [
+    { key: "maskPlaceholderDay", comment: "[Do not translate]", position: "right" },
+    { key: "maskPlaceholderMonth", comment: "[Do not translate]", position: "top" },
+    { key: "maskPlaceholderMinute", comment: "[Do not translate] localized manually per locale", position: "right" }
+  ];
+  // maskPlaceholderDay holds a manual value; maskPlaceholderMonth and maskPlaceholderMinute are
+  // absent and would be queued without the marker, like the unmarked "b" is
+  const translationText = `
+export var loc = {
+  "a": "a1",
+  maskPlaceholderDay: "T"
+};`;
+  const utils = new LocalizationUtils();
+  const stringsToTranslate = utils.getStringsToTranslate(translationText, englishJSON, englishComments);
+  expect(stringsToTranslate.length).toBe(1);
+  expect(stringsToTranslate[0].text).toBe("bb");
+  expect(stringsToTranslate[0].keys).toEqual(["b"]);
+});
+
+test("[Do not translate] marker: manual values survive and the marker is not copied into translated files", (): any => {
+  const englishJSON = {
+    a: "aa",
+    b: "bb",
+    maskPlaceholderDay: "d",
+    maskPlaceholderMonth: "m"
+  };
+  const englishComments: Array<ICommentInfo> = [
+    { key: "a", comment: "english: aa", position: "top" },
+    { key: "maskPlaceholderDay", comment: "[Do not translate]", position: "right" },
+    { key: "maskPlaceholderMonth", comment: "[Do not translate]", position: "right" }
+  ];
+  const translationText = `
+export var loc = {
+  "a": "a1",
+  maskPlaceholderDay: "T"
+};`;
+  const stringsToTranslate: Array<IStringToTranslate> = [
+    { text: "bb", keys: ["b"], translation: "bb-2" }
+  ];
+  const utils = new LocalizationUtils();
+  const res = utils.getJsonWithTranslation(translationText, englishJSON, stringsToTranslate, englishComments);
+  // the manual "T" is untouched, the marker did not propagate: maskPlaceholderDay gets the
+  // standard english-original annotation instead of the [Do not translate] comment
+  expect(res).toEqual(`{
+  // english: aa
+  a: "a1",
+  // [Auto-translated] "bb"
+  b: "bb-2",
+  // "d"
+  maskPlaceholderDay: "T"
+}`);
+});
