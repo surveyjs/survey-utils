@@ -480,3 +480,158 @@ export var loc = {
   maskPlaceholderDay: "T"
 }`);
 });
+test("Read comments from json with arrays", (): any => {
+  const utils = new LocalizationUtils();
+  const str1 = `export var loc = {
+  // top comment
+  defaultJson: {
+    choices: [{ value: "item1", text: "Article 1" }, { value: "item2", text: "Article 2" }, { value: "item3", text: "Article 3" }],
+    columns: [{ value: "column1", text: "Colonne 1" }, { value: "column2", text: "Colonne 2" }, { value: "column3", text: "Colonne 3" }],
+    rows: [{ value: "row1", text: "Ligne 1" }, { value: "row2", text: "Ligne 2" }],
+    matrixColumns: [{ name: "column1", title: "Colonne 1" }, { name: "column2", title: "Colonne 2" }, { name: "column3", title: "Colonne 3" }]
+  },
+  a: "b" // right comment
+};`;
+  expect(utils.readJsonComments(str1)).toEqual([
+    { key: "defaultJson", comment: "top comment", position: "top" },
+    { key: "a", comment: "right comment", position: "right" }
+  ]);
+  expect(utils.getJson(str1).defaultJson.rows).toEqual([{ value: "row1", text: "Ligne 1" }, { value: "row2", text: "Ligne 2" }]);
+  const str2 = `export var loc = {
+  list: [
+    // first
+    "one", // one right
+    {
+      // nested
+      text: "two"
+    },
+    [1, true, null]
+  ],
+  b: "c"
+};`;
+  expect(utils.readJsonComments(str2)).toEqual([
+    { key: "list.0", comment: "first", position: "top" },
+    { key: "list.0", comment: "one right", position: "right" },
+    { key: "list.1.text", comment: "nested", position: "top" }
+  ]);
+});
+test("generate json with arrays", (): any => {
+  const json = {
+    choices: [{ value: "item1", text: "Item 1" }, { value: "item2", text: "Item 2" }],
+    list: ["a", "b"],
+    empty: []
+  };
+  const utils = new LocalizationUtils();
+  expect(utils.generateJsonText(json, [])).toBe(`{
+  choices: [{ value: "item1", text: "Item 1" }, { value: "item2", text: "Item 2" }],
+  list: ["a", "b"],
+  empty: []
+}`);
+  const comments: any = [
+    { key: "choices.1.text", comment: "comment text", position: "top" },
+    { key: "list.0", comment: "comment a", position: "right" }
+  ];
+  expect(utils.generateJsonText(json, comments)).toBe(`{
+  choices: [
+    { value: "item1", text: "Item 1" },
+    {
+      value: "item2",
+      // comment text
+      text: "Item 2"
+    }
+  ],
+  list: [
+    "a", // comment a
+    "b"
+  ],
+  empty: []
+}`);
+});
+test("Translate json with arrays, do not translate value and name", (): any => {
+  const englishJSON = {
+    a: "aa",
+    defaultJson: {
+      choices: [{ value: "item1", text: "Item 1" }, { value: "item2", text: "Item 2" }],
+      matrixColumns: [{ name: "column1", title: "Column 1" }]
+    }
+  };
+  const translationText = `
+export var loc = {
+  a: "a1",
+  defaultJson: {
+    choices: [{ value: "item1", text: "Article 1" }]
+  }
+};
+setupLocale({ localeCode: "fr", strings: loc });
+`;
+  const utils = new LocalizationUtils();
+  const stringsToTranslate = utils.getStringsToTranslate(translationText, englishJSON);
+  expect(stringsToTranslate).toEqual([
+    { text: "Item 2", keys: ["defaultJson.choices.1.text"] },
+    { text: "Column 1", keys: ["defaultJson.matrixColumns.0.title"] }
+  ]);
+  utils.translateStrings = (locale: string, stringsToTranslate: IStringToTranslate[], onComplete: () => void) => {
+    stringsToTranslate.forEach(item => {
+      item.translation = item.text + "-" + locale;
+    });
+    onComplete();
+  };
+  let res = "";
+  utils.translateText(translationText, englishJSON, (newText: string) => {
+    res = newText;
+  }, "test.ts", []);
+
+  expect(res).toEqual(`
+export var loc = {
+  // "aa"
+  a: "a1",
+  defaultJson: {
+    choices: [
+      {
+        value: "item1",
+        // "Item 1"
+        text: "Article 1"
+      },
+      {
+        value: "item2",
+        // [Auto-translated] "Item 2"
+        text: "Item 2-fr"
+      }
+    ],
+    matrixColumns: [
+      {
+        name: "column1",
+        // [Auto-translated] "Column 1"
+        title: "Column 1-fr"
+      }
+    ]
+  }
+};
+setupLocale({ localeCode: "fr", strings: loc });
+`);
+  expect(utils.getStringsToTranslate(res, englishJSON)).toEqual([]);
+});
+test("Remove an array item in english", (): any => {
+  const englishJSON = {
+    defaultJson: {
+      choices: [{ value: "item1", text: "Item 1" }]
+    }
+  };
+  const translationText = `
+export var loc = {
+  defaultJson: {
+    choices: [{ value: "item1", text: "Article 1" }, { value: "item2", text: "Article 2" }]
+  }
+};
+setupLocale({ localeCode: "fr", strings: loc });
+`;
+  const utils = new LocalizationUtils();
+  expect(utils.updateTranslatedText(translationText, englishJSON)).toEqual(`
+export var loc = {
+  defaultJson: {
+    choices: [{ value: "item1", text: "Article 1" }]
+  }
+};
+setupLocale({ localeCode: "fr", strings: loc });
+`);
+});
