@@ -2,7 +2,7 @@
 
 Build-time tooling for the SurveyJS repos, behind one bin: **`survey-utils`**.
 
-Four commands, each solving a problem that used to be a per-repo script:
+Five commands, each solving a problem that used to be a per-repo script:
 
 | Command | What it does |
 | --- | --- |
@@ -10,6 +10,7 @@ Four commands, each solving a problem that used to be a per-repo script:
 | `check-strings [product]` | Reports localization strings that no product source reaches any more, and exits `1` so CI fails when a newly added string is never used. |
 | `generate-doc [product]` | Generates the API docs, the survey JSON Schema and the LLM authoring guide from a product's TypeScript sources and built bundle. |
 | `generate-doc <preset>` | The same, as a named bundle per product and per role: `library-site` publishes everything surveyjs.io serves for the Form Library — the docs *and* the design-token tables — while `library-build` produces what ships in the npm package. |
+| `install-mcp [editor]` | Adds the SurveyJS MCP server (<https://mcp.surveyjs.io/mcp>) to a code editor's MCP configuration — VS Code, WebStorm, Cursor, Windsurf, Visual Studio, Claude Code/Desktop, Zed, Cline — so an AI assistant in that editor can query the SurveyJS documentation. Without an editor it asks; `vscode` is the default. |
 
 ```bash
 survey-utils help      # the full option list
@@ -42,7 +43,7 @@ follows the change, this repo is released, and no CI/CD definition is edited. Se
 ```
 survey-utils/
 ├── src/
-│   ├── cli.ts                  # The bin: generate-doc (+ presets), translate, check-strings
+│   ├── cli.ts                  # The bin: generate-doc (+ presets), translate, check-strings, install-mcp
 │   ├── index.ts                # Package exports (see "The package exports" below)
 │   ├── paths.ts                # What --path means: the repo root, for every command
 │   ├── site-paths.ts           # Reads paths.json: the relative paths inside --path and --out
@@ -54,6 +55,7 @@ survey-utils/
 │   ├── translateAnalytics.ts
 │   ├── localization-utils.ts   # Locale-file parsing: JSON + comment extraction, Azure calls
 │   ├── checkUnusedStrings.ts   # check-strings: argument parsing, reporting, exit code
+│   ├── install-mcp.ts          # install-mcp: the editor table (config location + entry shape) and the merge
 │   ├── token-tables/           # The design-token tables, filled by the library-site preset
 │   │   ├── theme.ts            #   reads base-theme.ts as data: every --sjs2-* and its value
 │   │   ├── tables.ts           #   the <div id="..."> placeholders and what each one matches
@@ -78,6 +80,7 @@ survey-utils/
 │   ├── paths.test.ts           # --path and entry resolution
 │   ├── site-paths.test.ts      # paths.json's defaults, and how --out is resolved
 │   ├── token-tables.test.ts    # placeholder matching, value formatting, idempotency
+│   ├── install-mcp.test.ts     # the editor table, config locations per OS, the merge
 │   ├── doc-products.test.ts    # product -> repo + entries, and the roots it refuses
 │   └── doc-gen/                # Doc-generator specs + fixtures
 ├── paths.json                  # The relative paths inside --path and --out, in one file

@@ -22,6 +22,12 @@ export {
   Paths, ProductPaths, SitePaths, PATHS_FILE, paths, themePath, tokenTopicPaths,
   apiReferenceDir, llmGuideDir, siteDocsDir, siteRoot
 } from "./site-paths";
+// install-mcp: registering the SurveyJS MCP server with a code editor's MCP configuration.
+export {
+  MCP_SERVER_URL, MCP_SERVER_NAME, DEFAULT_EDITOR, McpEditor, McpEnvironment, mcpEditors,
+  mcpEditorIds, findMcpEditor, mergeMcpConfig, parseInstallMcpArgs, runInstallMcp,
+  InstallMcpUsageError
+} from "./install-mcp";
 
 export function translateFile(fileName: string): void {
     new LocalizationUtils().translateFile(fileName, getEnglishJson(fileName), getEnglishTopComments(fileName));
