@@ -10,7 +10,7 @@ Five commands, each solving a problem that used to be a per-repo script:
 | `check-strings [product]` | Reports localization strings that no product source reaches any more, and exits `1` so CI fails when a newly added string is never used. |
 | `generate-doc [product]` | Generates the API docs, the survey JSON Schema and the LLM authoring guide from a product's TypeScript sources and built bundle. |
 | `generate-doc <preset>` | The same, as a named bundle per product and per role: `library-site` publishes everything surveyjs.io serves for the Form Library — the docs *and* the design-token tables — while `library-build` produces what ships in the npm package. |
-| `install-mcp [editor]` | Adds the SurveyJS MCP server (<https://mcp.surveyjs.io/mcp>) to a code editor's MCP configuration — VS Code, WebStorm, Cursor, Windsurf, Visual Studio, Claude Code/Desktop, Zed, Cline — so an AI assistant in that editor can query the SurveyJS documentation. Without an editor it asks; `vscode` is the default. `--path <dir>` installs at workspace scope instead — the project's own `.vscode/mcp.json`, `.cursor/mcp.json`, `.mcp.json` or `.zed/settings.json`, so the server can be checked in with the repo. |
+| `install-mcp [editor]` | Adds the SurveyJS MCP server (<https://mcp.surveyjs.io/mcp>) to a code editor's MCP configuration — VS Code, WebStorm, Cursor, Windsurf, Visual Studio, Claude Code/Desktop, Zed, Cline — so an AI assistant in that editor can query the SurveyJS documentation. Without an editor it asks; `vscode` is the default. `--path <dir>` installs at workspace scope instead — the project's own `.vscode/mcp.json`, `.cursor/mcp.json`, `.mcp.json` or `.zed/settings.json`, so the server can be checked in with the repo. Described in full under [SurveyJS MCP server](#-surveyjs-mcp-server-install-mcp). |
 
 ```bash
 survey-utils help      # the full option list
@@ -94,9 +94,10 @@ survey-utils/
 
 ## 📍 `--path <dir>` — where the repo is
 
-`--path` means **one thing in every command: the root of a product's repo** — the folder
+`--path` means **one thing in every product command: the root of a product's repo** — the folder
 that holds its `package.json`, not a folder inside it. Each command joins its own subfolders onto
-that root, so nothing else about the layout has to be typed:
+that root, so nothing else about the layout has to be typed (`install-mcp` is the one exception,
+and the table says how):
 
 ```bash
 survey-utils check-strings library --path ../../LibV3/survey-library
@@ -110,6 +111,7 @@ survey-utils generate-doc  library --md --path ../../LibV3/survey-library
 | `translate` | The product's localization folder (`library` → `packages/survey-core/src/localization`). |
 | `generate-doc` | The product's entry files (`library` → `packages/survey-core/entries/chunks/model.ts`), and every relative path the caller passed: `--serializer`, `--out`, `--md-out`. |
 | `generate-doc library-site` | The above, plus survey-core's default theme — `product.theme` in [paths.json](paths.json) — for the design-token tables. |
+| `install-mcp` | The editor's own per-project MCP config: `.vscode/mcp.json`, `.cursor/mcp.json`, `.mcp.json` or `.zed/settings.json`. The one command whose `--path` is **any project's root**, not a SurveyJS product repo — there is no product involved, so nothing about the folder is checked beyond its existence. See [the install-mcp section](#-surveyjs-mcp-server-install-mcp). |
 
 Without `--path`, `translate` and `check-strings` expect the SurveyJS repos to sit **side by
 side** — the folder that holds `survey-utils` also holds `survey-library`, `survey-creator`,
@@ -947,7 +949,86 @@ drift apart:
   rating, ranking, tooltip and stepper item. Each needs a section in the topic, or an existing
   id widened to cover it.
 
-## 📄 License
+## � SurveyJS MCP server (install-mcp)
+
+```bash
+survey-utils install-mcp [editor] [--path <dir>] [--config <file>] [--dry-run]
+```
+
+Registers the **SurveyJS MCP server** — <https://mcp.surveyjs.io/mcp> — in a code editor's MCP
+configuration, so an AI assistant in that editor can query the SurveyJS documentation. Each
+editor keeps its MCP servers in a JSON file of its own — a different location and a different
+entry shape per editor — and both live in one table in
+[src/install-mcp.ts](src/install-mcp.ts); everything else about the install is shared.
+
+```bash
+survey-utils install-mcp                    # asks which editor; vscode is the default
+survey-utils install-mcp cursor             # user scope: every project gets the server
+survey-utils install-mcp vscode --path .    # workspace scope: .vscode/mcp.json, checked in
+survey-utils install-mcp zed --dry-run      # print what would be written, write nothing
+survey-utils install-mcp vscode --config .vscode/mcp.json   # a file the table does not know
+```
+
+### The editors
+
+Ten are supported. Without one on the command line the command lists them and asks — a number
+off the list or a name, case-insensitive, empty answer means `vscode`.
+
+| `[editor]` | Writes (user scope) | With `--path` (workspace scope) |
+| --- | --- | --- |
+| `vscode` | `mcp.json` in the VS Code profile (`%APPDATA%\Code\User`, `~/Library/Application Support/Code/User`, `~/.config/Code/User`) | `.vscode/mcp.json` |
+| `vscode-insiders` | The same, under `Code - Insiders` | `.vscode/mcp.json` |
+| `cursor` | `~/.cursor/mcp.json` | `.cursor/mcp.json` |
+| `windsurf` | `~/.codeium/windsurf/mcp_config.json` | — |
+| `webstorm` | The GitHub Copilot plugin's `mcp.json` (`%LOCALAPPDATA%\github-copilot\intellij` on Windows, `~/.config/github-copilot/intellij` elsewhere) — any JetBrains IDE, not just WebStorm. JetBrains AI Assistant keeps its own list, in its Settings UI. | — |
+| `visual-studio` | `~/.mcp.json` (VS 2022 17.14+) | `.mcp.json` |
+| `claude-code` | `~/.claude.json` (user scope: every project) | `.mcp.json` (project scope: the whole team, once checked in) |
+| `claude-desktop` | `claude_desktop_config.json` under the OS config dir | — |
+| `zed` | `settings.json` (`%APPDATA%\Zed` on Windows, `~/.config/zed` elsewhere) | `.zed/settings.json` |
+| `cline` | `cline_mcp_settings.json` in VS Code's `globalStorage` | — |
+
+Most editors take the remote server directly — `{ "type": "http", "url": … }`, or the `url` /
+`serverUrl` spelling their format wants. **Claude Desktop and Zed only run local (stdio)
+servers**, so for them the entry goes through `npx mcp-remote`, the standard remote-to-stdio
+bridge — which means **Node.js has to be on PATH** when that editor starts the server.
+
+`visual-studio` and `claude-code` share the `.mcp.json` file name at both scopes, but nest their
+servers under different keys (`servers` / `mcpServers`), so installing for both into the same
+file works — the merge writes one key and keeps the other.
+
+### The three ways to say where, and why they exclude each other
+
+| | Where it writes | Restrictions |
+| --- | --- | --- |
+| *(nothing)* | The editor's **user-scope** config — the server is available in every project. The default, because a documentation server is not project-specific. | — |
+| `--path <dir>` | The editor's **per-project** config under `<dir>`, so the server can be checked in and scoped to one repo. | Only the editors with a workspace config take it: `vscode`, `vscode-insiders`, `cursor`, `visual-studio`, `claude-code`, `zed`. The rest are rejected with that list. `<dir>` has to exist — it is not created, because a mistyped root silently creating a `.vscode` folder somewhere is worse than an error. |
+| `--config <file>` | Exactly `<file>` — the escape hatch for a portable install or a location the table does not know. Folders on the way are created. | Cannot be combined with `--path`: `--config` names the exact file, so there is nothing left for `--path` to decide. Passing both is rejected. |
+
+`--dry-run` combines with all of the above: it prints the file that would be written and its
+full contents, and writes nothing.
+
+### What the merge does — and refuses to do
+
+The existing config is **merged, never clobbered**:
+
+- Everything already in the file survives — other MCP servers, `inputs`, unrelated settings
+  (Zed's `settings.json` is the editor's whole configuration, not an MCP file).
+- Only the `surveyjs` entry is added — or **replaced**, so re-running is how a stale URL is
+  fixed. Re-running is idempotent.
+- The file is read as **JSON5** (comments and trailing commas parse — Zed's settings
+  legitimately hold both) and written back as plain JSON, so **comments are not preserved**;
+  the Zed install says so in its note.
+- A file that will not parse, or parses to something other than an object, **fails the run and
+  is left untouched** — a broken config is reported, not overwritten.
+
+### Exit codes
+
+Same convention as every other command: **0** installed (or `--dry-run` printed), **2** a usage
+mistake — unknown editor, `--path` + `--config`, a `--path` that is not there or names an
+editor without a workspace config, an unparseable existing config — reported as a message
+without a stack trace, **1** anything unexpected.
+
+## �📄 License
 
 MIT — see [LICENSE](LICENSE).
 
