@@ -181,9 +181,12 @@ export const mcpEditors: McpEditor[] = [
     name: "Zed",
     serversKey: "context_servers",
     entry: { source: "custom", ...bridgeEntry },
-    configPath: (env) => env.platform === "win32"
-      ? path.join(appData(env), "Zed", "settings.json")
-      : path.join(env.home, ".config", "zed", "settings.json"),
+    configPath: (env) => {
+      if (env.platform === "win32") return path.join(appData(env), "Zed", "settings.json");
+      // Zed uses ~/.config even on macOS, but honors XDG_CONFIG_HOME on Linux.
+      if (env.platform === "darwin") return path.join(env.home, ".config", "zed", "settings.json");
+      return path.join(userConfigDir(env), "zed", "settings.json");
+    },
     workspaceConfigPath: (root) => path.join(root, ".zed", "settings.json"),
     note: "Zed's settings only run local servers, so this goes through 'npx mcp-remote': Node.js\n"
       + "has to be on PATH. Comments in settings.json are not preserved by the rewrite."
@@ -306,18 +309,34 @@ export function mergeMcpConfig(existing: string | undefined, editor: McpEditor):
       );
     }
   }
-  const servers = typeof config[editor.serversKey] === "object" && !!config[editor.serversKey]
-    && !Array.isArray(config[editor.serversKey])
-    ? config[editor.serversKey]
-    : {};
+  const section = config[editor.serversKey];
+  if (section !== undefined
+    && (typeof section !== "object" || section === null || Array.isArray(section))) {
+    throw new InstallMcpUsageError(
+      `The existing config's '${editor.serversKey}' section is not an object of servers, so `
+      + "merging into it would discard what is there.\nFix or remove the file and re-run.", true
+    );
+  }
+  const servers = section === undefined ? {} : section;
   config[editor.serversKey] = servers;
   servers[MCP_SERVER_NAME] = editor.entry;
   return JSON.stringify(config, null, 2) + "\n";
 }
 
-/** One question at the prompt, promisified. */
-function question(rl: readline.Interface, prompt: string): Promise<string> {
-  return new Promise((resolve) => rl.question(prompt, resolve));
+/**
+ * One question at the prompt, promisified. Resolves to undefined when the input closes before
+ * an answer arrives -- rl.question's callback never fires in that case, so without the close
+ * handler the promise would never settle and the process would exit 0 having installed nothing.
+ */
+function question(rl: readline.Interface, prompt: string): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const onClose = () => resolve(undefined);
+    rl.once("close", onClose);
+    rl.question(prompt, (answer) => {
+      rl.removeListener("close", onClose);
+      resolve(answer);
+    });
+  });
 }
 
 /** The interactive route: list the editors, take a number or a name, default to vscode. */
@@ -330,6 +349,12 @@ async function askEditor(): Promise<McpEditor> {
     });
     for (;;) {
       const answer = await question(rl, `\nEditor (number or name) [${DEFAULT_EDITOR}]: `);
+      if (answer === undefined) {
+        throw new InstallMcpUsageError(
+          "The input closed before an editor was chosen, so nothing was installed.\n"
+          + `Pass the editor on the command line instead: survey-utils install-mcp <${mcpEditorIds.join(" | ")}>.`, true
+        );
+      }
       const editor = resolveEditorAnswer(answer);
       if (!!editor) return editor;
       console.log(`'${answer.trim()}' is not on the list -- type a number 1-${mcpEditors.length} or an editor name.`);

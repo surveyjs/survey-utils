@@ -1,6 +1,16 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as readline from "readline";
+import { PassThrough } from "stream";
+
+// readline.createInterface is not configurable, so jest.spyOn cannot stub it; the module mock
+// below keeps the real implementation but makes the factory replaceable for the stdin tests.
+jest.mock("readline", () => {
+  const actual = jest.requireActual("readline");
+  return { ...actual, createInterface: jest.fn(actual.createInterface) };
+});
+
 import {
   DEFAULT_EDITOR, InstallMcpUsageError, MCP_SERVER_NAME, MCP_SERVER_URL, McpEnvironment,
   findMcpEditor, mcpEditorIds, mcpEditors, mergeMcpConfig, parseInstallMcpArgs,
@@ -64,6 +74,13 @@ test("vscode's config is the user-profile mcp.json, at each OS's convention", ()
 test("linux honors XDG_CONFIG_HOME when it is set", () => {
   const xdg: McpEnvironment = { ...linux, env: { XDG_CONFIG_HOME: "/xdg" } };
   expect(configPath("vscode", xdg)).toBe(path.join("/xdg", "Code", "User", "mcp.json"));
+});
+
+test("zed honors XDG_CONFIG_HOME on linux too, but stays in ~/.config on macOS", () => {
+  const xdg: McpEnvironment = { ...linux, env: { XDG_CONFIG_HOME: "/xdg" } };
+  expect(configPath("zed", xdg)).toBe(path.join("/xdg", "zed", "settings.json"));
+  expect(configPath("zed", linux)).toBe(path.join("/home/dev", ".config", "zed", "settings.json"));
+  expect(configPath("zed", mac)).toBe(path.join("/Users/dev", ".config", "zed", "settings.json"));
 });
 
 test("cursor and claude-code keep their config under the home directory on every OS", () => {
@@ -152,6 +169,14 @@ test("a config that will not parse is reported, not overwritten", () => {
 
 test("a config that parses to a non-object is rejected the same way", () => {
   expect(() => mergeMcpConfig("[1, 2]", vscode)).toThrow(/not a JSON object/);
+});
+
+test("a malformed servers section is rejected, not silently replaced", () => {
+  const asArray = JSON.stringify({ servers: [{ name: "other", url: "https://other.example" }] });
+  expect(() => mergeMcpConfig(asArray, vscode)).toThrow(InstallMcpUsageError);
+  expect(() => mergeMcpConfig(asArray, vscode)).toThrow(/'servers' section is not an object/);
+  expect(() => mergeMcpConfig('{ "servers": "oops" }', vscode)).toThrow(InstallMcpUsageError);
+  expect(() => mergeMcpConfig('{ "servers": null }', vscode)).toThrow(InstallMcpUsageError);
 });
 
 test("an empty or whitespace-only file merges like a missing one", () => {
@@ -271,6 +296,19 @@ describe("runInstallMcp", () => {
 
   test("an unknown editor is rejected by the run too, for callers that skip parseInstallMcpArgs", async () => {
     await expect(runInstallMcp({ editor: "emacs", dryRun: true })).rejects.toThrow(/Unknown editor/);
+  });
+
+  test("input that closes before an answer cancels the run instead of reporting success", async () => {
+    const input = new PassThrough();
+    const rl = jest.requireActual("readline")
+      .createInterface({ input, output: new PassThrough() });
+    (readline.createInterface as jest.Mock).mockReturnValueOnce(rl);
+    const file = path.join(dir, "mcp.json");
+    const run = runInstallMcp({ config: file, dryRun: false });
+    input.end(); // stdin closes without an answer
+    await expect(run).rejects.toThrow(InstallMcpUsageError);
+    await expect(run).rejects.toThrow(/closed before an editor was chosen/);
+    expect(fs.existsSync(file)).toBe(false);
   });
 
   test("--path writes the editor's per-project config under the project root", async () => {
