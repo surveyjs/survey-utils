@@ -10,6 +10,7 @@ import { parse } from "json5";
  *
  *   survey-utils install-mcp                  # asks which editor; vscode is the default
  *   survey-utils install-mcp cursor
+ *   survey-utils install-mcp vscode --path .   # workspace scope: .vscode/mcp.json, checked in
  *   survey-utils install-mcp webstorm --dry-run
  *
  * Every editor keeps its MCP servers in a JSON file of its own -- a different location and a
@@ -74,8 +75,16 @@ export interface McpEditor {
   /** The server entry written under that key -- each editor spells a remote server its own way. */
   entry: { [key: string]: unknown };
   configPath(env: McpEnvironment): string;
+  /**
+   * The per-project config the editor reads inside a workspace -- .vscode/mcp.json,
+   * .cursor/mcp.json -- for the editors that have one. --path installs there instead of at
+   * user scope, so the server can be checked in with the project.
+   */
+  workspaceConfigPath?(root: string): string;
   /** Printed after the install: a restart, a prerequisite, a caveat. */
   note?: string;
+  /** Printed instead of note after a --path install, when the scope changes the advice. */
+  workspaceNote?: string;
 }
 
 /** The entry for editors that take a remote server directly, in the common { type, url } shape. */
@@ -96,6 +105,7 @@ export const mcpEditors: McpEditor[] = [
     serversKey: "servers",
     entry: httpEntry,
     configPath: (env) => path.join(userConfigDir(env), "Code", "User", "mcp.json"),
+    workspaceConfigPath: (root) => path.join(root, ".vscode", "mcp.json"),
     note: "Open the Chat view and pick Agent mode to use the server."
   },
   {
@@ -104,6 +114,7 @@ export const mcpEditors: McpEditor[] = [
     serversKey: "servers",
     entry: httpEntry,
     configPath: (env) => path.join(userConfigDir(env), "Code - Insiders", "User", "mcp.json"),
+    workspaceConfigPath: (root) => path.join(root, ".vscode", "mcp.json"),
     note: "Open the Chat view and pick Agent mode to use the server."
   },
   {
@@ -112,6 +123,7 @@ export const mcpEditors: McpEditor[] = [
     serversKey: "mcpServers",
     entry: { url: MCP_SERVER_URL },
     configPath: (env) => path.join(env.home, ".cursor", "mcp.json"),
+    workspaceConfigPath: (root) => path.join(root, ".cursor", "mcp.json"),
     note: "Restart Cursor to pick up the change."
   },
   {
@@ -141,6 +153,7 @@ export const mcpEditors: McpEditor[] = [
     serversKey: "servers",
     entry: httpEntry,
     configPath: (env) => path.join(env.home, ".mcp.json"),
+    workspaceConfigPath: (root) => path.join(root, ".mcp.json"),
     note: "Needs Visual Studio 2022 17.14 or later; the server appears in Copilot Chat's Agent mode."
   },
   {
@@ -149,7 +162,10 @@ export const mcpEditors: McpEditor[] = [
     serversKey: "mcpServers",
     entry: httpEntry,
     configPath: (env) => path.join(env.home, ".claude.json"),
-    note: "Installed at user scope: available in every project. Run /mcp inside Claude Code to check it."
+    workspaceConfigPath: (root) => path.join(root, ".mcp.json"),
+    note: "Installed at user scope: available in every project. Run /mcp inside Claude Code to check it.",
+    workspaceNote: ".mcp.json is project scope: check it in and the whole team gets the server.\n"
+      + "Run /mcp inside Claude Code to check it."
   },
   {
     id: "claude-desktop",
@@ -168,6 +184,7 @@ export const mcpEditors: McpEditor[] = [
     configPath: (env) => env.platform === "win32"
       ? path.join(appData(env), "Zed", "settings.json")
       : path.join(env.home, ".config", "zed", "settings.json"),
+    workspaceConfigPath: (root) => path.join(root, ".zed", "settings.json"),
     note: "Zed's settings only run local servers, so this goes through 'npx mcp-remote': Node.js\n"
       + "has to be on PATH. Comments in settings.json are not preserved by the rewrite."
   },
@@ -185,6 +202,10 @@ export const mcpEditors: McpEditor[] = [
 ];
 
 export const mcpEditorIds = mcpEditors.map((editor) => editor.id);
+
+/** The editors --path can install for: the ones with a per-project config to write. */
+export const workspaceMcpEditorIds =
+  mcpEditors.filter((editor) => !!editor.workspaceConfigPath).map((editor) => editor.id);
 
 export function findMcpEditor(id: string): McpEditor | undefined {
   const lower = id.toLowerCase();
@@ -216,6 +237,8 @@ export function resolveEditorAnswer(answer: string): McpEditor | undefined {
 export interface InstallMcpArgs {
   /** The editor named on the command line. Absent: the command asks. */
   editor?: string;
+  /** --path: a project root -- install at workspace scope, into the project's own MCP config. */
+  path?: string;
   /** --config: write this file instead of the editor's own location. */
   config?: string;
   /** --dry-run: print the resulting configuration instead of writing it. */
@@ -226,12 +249,17 @@ export function parseInstallMcpArgs(args: string[]): InstallMcpArgs {
   const res: InstallMcpArgs = { dryRun: false };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--config") {
+    const value = (): string => {
       const next = args[++i];
       if (next === undefined || next.indexOf("--") === 0) {
-        throw new InstallMcpUsageError("--config needs a value");
+        throw new InstallMcpUsageError(arg + " needs a value");
       }
-      res.config = next;
+      return next;
+    };
+    if (arg === "--config") {
+      res.config = value();
+    } else if (arg === "--path") {
+      res.path = value();
     } else if (arg === "--dry-run") {
       res.dryRun = true;
     } else if (arg.indexOf("--") === 0) {
@@ -244,6 +272,12 @@ export function parseInstallMcpArgs(args: string[]): InstallMcpArgs {
       requireMcpEditor(arg); // reject a typo here, before the prompt is skipped over it
       res.editor = arg;
     }
+  }
+  if (res.path !== undefined && res.config !== undefined) {
+    throw new InstallMcpUsageError(
+      "--path and --config together are ambiguous: --config already names the exact file,\n"
+      + "while --path asks the editor's own per-project location to be used. Pass one.", true
+    );
   }
   return res;
 }
@@ -305,9 +339,35 @@ async function askEditor(): Promise<McpEditor> {
   }
 }
 
+/**
+ * The file the install writes: --config names it outright, --path asks for the editor's
+ * per-project config under a project root, and without either it is the editor's user-scope
+ * location. The --path route is checked here -- the root has to exist, and the editor has to
+ * have a workspace config at all -- so a typo fails before anything is merged.
+ */
+function installTarget(args: InstallMcpArgs, editor: McpEditor): string {
+  if (args.config !== undefined) return path.resolve(args.config);
+  if (args.path === undefined) return editor.configPath(defaultEnvironment());
+  const root = path.resolve(args.path);
+  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+    throw new InstallMcpUsageError(
+      `--path: no such directory: ${root}\n`
+      + "It is the project root the workspace config is written under, so it has to exist.", true
+    );
+  }
+  if (!editor.workspaceConfigPath) {
+    throw new InstallMcpUsageError(
+      `${editor.name} has no per-project MCP config, so --path has nothing to write: it reads `
+      + "its servers from one user-scope file. Re-run without --path to install there.\n"
+      + `Editors --path works for: ${workspaceMcpEditorIds.join(" | ")}.`, true
+    );
+  }
+  return editor.workspaceConfigPath(root);
+}
+
 export async function runInstallMcp(args: InstallMcpArgs): Promise<number> {
   const editor = args.editor !== undefined ? requireMcpEditor(args.editor) : await askEditor();
-  const file = args.config !== undefined ? path.resolve(args.config) : editor.configPath(defaultEnvironment());
+  const file = installTarget(args, editor);
   const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : undefined;
   const merged = mergeMcpConfig(existing, editor);
 
@@ -322,6 +382,7 @@ export async function runInstallMcp(args: InstallMcpArgs): Promise<number> {
       + `${existing !== undefined ? "updated in" : "added to"} ${file}`
     );
   }
-  if (!!editor.note) console.log("\n" + editor.note);
+  const note = args.path !== undefined && !!editor.workspaceNote ? editor.workspaceNote : editor.note;
+  if (!!note) console.log("\n" + note);
   return 0;
 }

@@ -4,7 +4,7 @@ import * as path from "path";
 import {
   DEFAULT_EDITOR, InstallMcpUsageError, MCP_SERVER_NAME, MCP_SERVER_URL, McpEnvironment,
   findMcpEditor, mcpEditorIds, mcpEditors, mergeMcpConfig, parseInstallMcpArgs,
-  resolveEditorAnswer, runInstallMcp
+  resolveEditorAnswer, runInstallMcp, workspaceMcpEditorIds
 } from "../src/install-mcp";
 
 // ---------------------------------------------------------------------------
@@ -178,6 +178,33 @@ test("--config and --dry-run parse; a stray option is rejected", () => {
   expect(() => parseInstallMcpArgs(["--force"])).toThrow(/Unknown option/);
 });
 
+test("--path parses like every other command's, and cannot be combined with --config", () => {
+  expect(parseInstallMcpArgs(["vscode", "--path", "some/project"]).path).toBe("some/project");
+  expect(() => parseInstallMcpArgs(["--path"])).toThrow(/--path needs a value/);
+  expect(() => parseInstallMcpArgs(["vscode", "--path", "a", "--config", "b"]))
+    .toThrow(/--path and --config together/);
+});
+
+// ---------------------------------------------------------------------------
+// Workspace-scope locations, per editor
+
+test("the editors with a per-project config are the ones --path is documented to take", () => {
+  expect(workspaceMcpEditorIds).toEqual(
+    ["vscode", "vscode-insiders", "cursor", "visual-studio", "claude-code", "zed"]
+  );
+});
+
+test("each workspace config lands in the editor's own folder under the project root", () => {
+  const root = path.join("C:", "proj");
+  const at = (id: string) => findMcpEditor(id)!.workspaceConfigPath!(root);
+  expect(at("vscode")).toBe(path.join(root, ".vscode", "mcp.json"));
+  expect(at("vscode-insiders")).toBe(path.join(root, ".vscode", "mcp.json"));
+  expect(at("cursor")).toBe(path.join(root, ".cursor", "mcp.json"));
+  expect(at("visual-studio")).toBe(path.join(root, ".mcp.json"));
+  expect(at("claude-code")).toBe(path.join(root, ".mcp.json"));
+  expect(at("zed")).toBe(path.join(root, ".zed", "settings.json"));
+});
+
 // ---------------------------------------------------------------------------
 // The prompt's answers
 
@@ -244,5 +271,21 @@ describe("runInstallMcp", () => {
 
   test("an unknown editor is rejected by the run too, for callers that skip parseInstallMcpArgs", async () => {
     await expect(runInstallMcp({ editor: "emacs", dryRun: true })).rejects.toThrow(/Unknown editor/);
+  });
+
+  test("--path writes the editor's per-project config under the project root", async () => {
+    await runInstallMcp({ editor: "vscode", path: dir, dryRun: false });
+    const written = JSON.parse(fs.readFileSync(path.join(dir, ".vscode", "mcp.json"), "utf8"));
+    expect(written.servers[MCP_SERVER_NAME]).toEqual({ type: "http", url: MCP_SERVER_URL });
+  });
+
+  test("--path rejects a project root that is not there, before anything is merged", async () => {
+    await expect(runInstallMcp({ editor: "vscode", path: path.join(dir, "nope"), dryRun: false }))
+      .rejects.toThrow(/no such directory/);
+  });
+
+  test("--path rejects an editor without a per-project config, and lists the ones with one", async () => {
+    await expect(runInstallMcp({ editor: "windsurf", path: dir, dryRun: true }))
+      .rejects.toThrow(new RegExp(workspaceMcpEditorIds.join(" \\| ")));
   });
 });

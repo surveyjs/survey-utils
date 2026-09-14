@@ -16,7 +16,7 @@ import {
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 import {
   DEFAULT_EDITOR, InstallMcpUsageError, MCP_SERVER_URL, mcpEditorIds, parseInstallMcpArgs,
-  runInstallMcp
+  runInstallMcp, workspaceMcpEditorIds
 } from "./install-mcp";
 import { fillTokenTables } from "./token-tables";
 import {
@@ -199,7 +199,7 @@ survey-utils translate <product> [--key <key>] [--path <dir>]
   --path <dir>              Repo root of the product. The product's localization folder is
                             joined onto it (library -> packages/survey-core/src/localization).
 
-survey-utils install-mcp [editor] [--config <file>] [--dry-run]
+survey-utils install-mcp [editor] [--path <dir>] [--config <file>] [--dry-run]
 
   Adds the SurveyJS MCP server -- ${MCP_SERVER_URL} -- to a code editor's MCP
   configuration, so an AI assistant in that editor can query the SurveyJS documentation. Each
@@ -210,9 +210,13 @@ survey-utils install-mcp [editor] [--config <file>] [--dry-run]
                             ${mcpEditorIds.slice(5).join(" | ")}.
                             Without one the command asks, with '${DEFAULT_EDITOR}' as the default.
 
-  --config <file>           Write this file instead of the editor's own config location. For
-                            a workspace-level config (.vscode/mcp.json, .cursor/mcp.json) or
-                            a location the table does not know.
+  --path <dir>              Install at workspace scope instead of user scope: the server goes
+                            into the project's own MCP config under this root -- .vscode/mcp.json,
+                            .cursor/mcp.json, .zed/settings.json, .mcp.json -- so it can be
+                            checked in and scoped to one repo. Only the editors with a
+                            per-project config take it: ${workspaceMcpEditorIds.join(" | ")}.
+  --config <file>           Write this file instead of either location the command knows.
+                            Cannot be combined with --path: it already names the exact file.
   --dry-run                 Print the resulting configuration instead of writing it.
 
   Claude Desktop and Zed only run local (stdio) servers, so for them the server is registered

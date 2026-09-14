@@ -10,7 +10,7 @@ Five commands, each solving a problem that used to be a per-repo script:
 | `check-strings [product]` | Reports localization strings that no product source reaches any more, and exits `1` so CI fails when a newly added string is never used. |
 | `generate-doc [product]` | Generates the API docs, the survey JSON Schema and the LLM authoring guide from a product's TypeScript sources and built bundle. |
 | `generate-doc <preset>` | The same, as a named bundle per product and per role: `library-site` publishes everything surveyjs.io serves for the Form Library — the docs *and* the design-token tables — while `library-build` produces what ships in the npm package. |
-| `install-mcp [editor]` | Adds the SurveyJS MCP server (<https://mcp.surveyjs.io/mcp>) to a code editor's MCP configuration — VS Code, WebStorm, Cursor, Windsurf, Visual Studio, Claude Code/Desktop, Zed, Cline — so an AI assistant in that editor can query the SurveyJS documentation. Without an editor it asks; `vscode` is the default. |
+| `install-mcp [editor]` | Adds the SurveyJS MCP server (<https://mcp.surveyjs.io/mcp>) to a code editor's MCP configuration — VS Code, WebStorm, Cursor, Windsurf, Visual Studio, Claude Code/Desktop, Zed, Cline — so an AI assistant in that editor can query the SurveyJS documentation. Without an editor it asks; `vscode` is the default. `--path <dir>` installs at workspace scope instead — the project's own `.vscode/mcp.json`, `.cursor/mcp.json`, `.mcp.json` or `.zed/settings.json`, so the server can be checked in with the repo. |
 
 ```bash
 survey-utils help      # the full option list
