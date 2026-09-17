@@ -7,7 +7,6 @@ Build tools for SurveyJS repositories. Run them with the `survey-utils` CLI.
 | `translate <product>` | Translate missing locale strings with Azure Translator |
 | `check-strings [product]` | Find unused localization strings |
 | `generate-doc [product or preset]` | Generate API docs, JSON Schema, and an LLM authoring guide |
-| `install-mcp [editor]` | Add the SurveyJS documentation server to an editor's MCP configuration |
 
 ## Setup
 
@@ -265,42 +264,6 @@ In `survey-pdf/package.json`:
 }
 ```
 
-## MCP Server Setup
-
-`install-mcp` adds the SurveyJS documentation server at `https://mcp.surveyjs.io/mcp` to an editor's configuration.
-
-```bash
-survey-utils install-mcp # Choose an editor; defaults to VS Code
-survey-utils install-mcp cursor # Install for all Cursor projects
-survey-utils install-mcp vscode --path . # Install for the current VS Code workspace
-survey-utils install-mcp zed --dry-run # Preview the Zed configuration without writing
-survey-utils install-mcp vscode --config .vscode/mcp.json # Write to an explicit config file
-```
-
-### Editors and Scope
-
-By default, the command uses the editor's user config. Use `--path <dir>` for a workspace config in an existing project, or `--config <file>` to choose a file. You cannot combine `--path` and `--config`. `--dry-run` works with either scope.
-
-| Editor | User configuration | Workspace configuration |
-| --- | --- | --- |
-| `vscode` | `mcp.json` in the VS Code user profile | `.vscode/mcp.json` |
-| `vscode-insiders` | `mcp.json` in the VS Code Insiders user profile | `.vscode/mcp.json` |
-| `cursor` | `~/.cursor/mcp.json` | `.cursor/mcp.json` |
-| `windsurf` | `~/.codeium/windsurf/mcp_config.json` | Not supported |
-| `webstorm` | GitHub Copilot's `mcp.json` for JetBrains IDEs | Not supported |
-| `visual-studio` | `~/.mcp.json` | `.mcp.json` |
-| `claude-code` | `~/.claude.json` | `.mcp.json` |
-| `claude-desktop` | `claude_desktop_config.json` in the OS configuration directory | Not supported |
-| `zed` | Zed's `settings.json` | `.zed/settings.json` |
-| `cline` | `cline_mcp_settings.json` in VS Code's `globalStorage` | Not supported |
-
-**Notes:**
-
-- `install-mcp` adds or replaces the `surveyjs` entry and keeps other settings.
-- The `webstorm` option works with GitHub Copilot in JetBrains IDEs. JetBrains AI Assistant uses separate settings.
-- The generated Claude Desktop and Zed configs use `npx mcp-remote`, which needs Node.js on `PATH`.
-- Exit codes: `0` for success or a completed dry run, `2` for invalid arguments or config, and `1` for unexpected errors.
-
 ## Development Reference
 
 | Location | Contents |
@@ -310,7 +273,6 @@ By default, the command uses the editor's user config. Use `--path <dir>` for a 
 | [src/loc-lint](src/loc-lint) | Unused-string analysis and product resolvers |
 | [src/translate.ts](src/translate.ts) | Translation command and product paths |
 | [src/token-tables](src/token-tables) | Design-token extraction and table generation |
-| [src/install-mcp.ts](src/install-mcp.ts) | Editor configuration paths and MCP installation |
 | [tests](tests) | Test suites and fixtures |
 
 **Notes:**
