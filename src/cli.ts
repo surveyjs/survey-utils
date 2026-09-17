@@ -14,6 +14,10 @@ import {
   docBundle, docEntries, docOut, docProductNames, docProducts, docRoot, SERIALIZER_PRODUCT
 } from "./doc-products";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
+import {
+  DEFAULT_EDITOR, InstallMcpUsageError, MCP_SERVER_URL, mcpEditorIds, parseInstallMcpArgs,
+  runInstallMcp, workspaceMcpEditorIds
+} from "./install-mcp";
 import { fillTokenTables } from "./token-tables";
 import {
   apiReferenceDir, llmGuideDir, paths, PATHS_FILE, siteDocsDir, siteRoot, tokenTopicPaths
@@ -52,6 +56,7 @@ Commands:
   generate-doc [product]    Generate API documentation from a product's TypeScript sources.
   check-strings [product]   Report localization strings no product source reaches any more.
   translate <product>       Translate the localization files of a product.
+  install-mcp [editor]      Add the SurveyJS MCP server to a code editor's MCP configuration.
 
 Each takes a product and finds its folders itself. --path <dir> means the same thing in all of
 them: the root of the product's repo -- the folder that holds its package.json, not a folder
@@ -193,6 +198,29 @@ survey-utils translate <product> [--key <key>] [--path <dir>]
                             from TRANSLATION_API_KEY (environment or .env); --key wins.
   --path <dir>              Repo root of the product. The product's localization folder is
                             joined onto it (library -> packages/survey-core/src/localization).
+
+survey-utils install-mcp [editor] [--path <dir>] [--config <file>] [--dry-run]
+
+  Adds the SurveyJS MCP server -- ${MCP_SERVER_URL} -- to a code editor's MCP
+  configuration, so an AI assistant in that editor can query the SurveyJS documentation. Each
+  editor keeps its MCP servers in a JSON file of its own; the command knows where each one
+  lives and merges the server in without touching the others already registered there.
+
+  [editor]                  ${mcpEditorIds.slice(0, 5).join(" | ")} |
+                            ${mcpEditorIds.slice(5).join(" | ")}.
+                            Without one the command asks, with '${DEFAULT_EDITOR}' as the default.
+
+  --path <dir>              Install at workspace scope instead of user scope: the server goes
+                            into the project's own MCP config under this root -- .vscode/mcp.json,
+                            .cursor/mcp.json, .zed/settings.json, .mcp.json -- so it can be
+                            checked in and scoped to one repo. Only the editors with a
+                            per-project config take it: ${workspaceMcpEditorIds.join(" | ")}.
+  --config <file>           Write this file instead of either location the command knows.
+                            Cannot be combined with --path: it already names the exact file.
+  --dry-run                 Print the resulting configuration instead of writing it.
+
+  Claude Desktop and Zed only run local (stdio) servers, so for them the server is registered
+  through 'npx mcp-remote', and Node.js has to be on PATH when the editor starts it.
 
 `;
 
@@ -717,6 +745,21 @@ function main(): void {
       if (code !== 0) process.exit(code);
       return;
     }
+    if (command === "install-mcp") {
+      // The arguments are checked here, synchronously, so a typo gets the same reporting as
+      // every other command's. The run itself may prompt, so it is a promise: its own errors
+      // (a config file that will not parse) are self-contained and reported without the usage.
+      const parsed = parseInstallMcpArgs(argv.slice(1));
+      runInstallMcp(parsed).then(
+        (code) => process.exit(code),
+        (error) => {
+          const usage = error instanceof InstallMcpUsageError;
+          console.error(usage ? String(error.message) : String(error instanceof Error ? error.stack : error));
+          process.exit(usage ? 2 : 1);
+        }
+      );
+      return;
+    }
     throw new UsageError("Unknown command: " + command);
   } catch (error) {
     // A path that is not there -- a --path, an entry file -- is the caller's mistake, and the
@@ -725,11 +768,13 @@ function main(): void {
       console.error(error.message);
       process.exit(2);
     }
-    const usage = error instanceof UsageError || error instanceof TranslateUsageError;
+    const usage = error instanceof UsageError || error instanceof TranslateUsageError
+      || error instanceof InstallMcpUsageError;
     console.error(usage ? String(error.message) : String(error instanceof Error ? error.stack : error));
     // A self-contained usage error listed what the caller has to choose from: appending the
     // whole usage text below it would only push that list off the screen.
-    const selfContained = error instanceof UsageError && error.selfContained;
+    const selfContained = (error instanceof UsageError || error instanceof InstallMcpUsageError)
+      && error.selfContained;
     if (usage && !selfContained) console.error("\n" + USAGE);
     process.exit(usage ? 2 : 1);
   }
