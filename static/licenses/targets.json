@@ -1,0 +1,29 @@
+{
+  "EULA": {
+    "survey-creator": [
+      "LICENSE",
+      "packages/survey-creator-angular/LICENSE",
+      "packages/survey-creator-core/LICENSE",
+      "packages/survey-creator-js/LICENSE",
+      "packages/survey-creator-react/LICENSE",
+      "packages/survey-creator-vue/LICENSE"
+    ],
+    "survey-pdf": ["LICENSE"],
+    "survey-analytics": ["LICENSE"],
+    "collaborative-form-editing": ["LICENSE"],
+    "surveyjs-nuget": ["licenses/LICENSE.txt"]
+  },
+  "MIT": {
+    "survey-library": ["LICENSE"],
+    "theme-adapter-demos": ["LICENSE"],
+    "custom-widgets": ["LICENSE"],
+    "surveyjs-skills": ["LICENSE"],
+    "collaborative-form-filling": ["LICENSE"],
+    "surveyjs-server": ["LICENSE"],
+    "react-axe-reporter": ["LICENSE"],
+    "ai-form-response-extractor": ["LICENSE"],
+    "ai-form-response-extractor-demo": ["LICENSE"],
+    "surveyjs-howtos-and-troubleshooting": ["LICENSE"],
+    "eslint-surveyjs": ["LICENSE"]
+  }
+}
