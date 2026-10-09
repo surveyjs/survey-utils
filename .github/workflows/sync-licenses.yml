@@ -1,0 +1,91 @@
+name: Sync licenses
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - static/licenses/**
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Show the diff without pushing
+        type: boolean
+        default: true
+
+concurrency:
+  group: sync-licenses
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: static/licenses
+
+      - id: targets
+        shell: bash
+        run: |
+          matrix=$(jq -c '[to_entries[] | .key as $license | .value | to_entries[]
+            | {license: $license, repo: .key, paths: .value}]' static/licenses/targets.json)
+          echo "$matrix" | jq .
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  sync:
+    needs: plan
+    runs-on: ubuntu-latest
+    name: ${{ matrix.target.license }} → ${{ matrix.target.repo }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
+          sparse-checkout: static/licenses
+
+      - uses: actions/checkout@v4
+        with:
+          repository: surveyjs/${{ matrix.target.repo }}
+          token: ${{ secrets.REPOS_ACCESS_TOKEN }}
+          path: target
+
+      - shell: bash
+        working-directory: target
+        env:
+          REPO: ${{ matrix.target.repo }}
+          LICENSE: ${{ matrix.target.license }}
+          PATHS: ${{ toJSON(matrix.target.paths) }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          src="$GITHUB_WORKSPACE/source/static/licenses/$LICENSE"
+          mapfile -t paths < <(jq -r '.[]' <<<"$PATHS")
+
+          for p in "${paths[@]}"; do
+            if [ ! -f "$p" ]; then
+              echo "::error::$p not found in $REPO"
+              exit 1
+            fi
+            cp "$src" "$p"
+          done
+
+          git add -- "${paths[@]}"
+          if git diff --cached --quiet; then
+            echo "Already up to date"
+            exit 0
+          fi
+          git diff --cached --stat
+
+          if [ "$DRY_RUN" = true ]; then
+            echo "Dry run: not pushing"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update $LICENSE license [skip ci]" -m "Synced from surveyjs/survey-utils@$GITHUB_SHA"
+          git push origin HEAD
