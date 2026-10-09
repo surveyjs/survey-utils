@@ -20,13 +20,13 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
+      matrix: ${{ steps.targets.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: static/licenses
 
-      - id: plan
+      - id: targets
         shell: bash
         run: |
           matrix=$(jq -c '[to_entries[] | .key as $license | .value | to_entries[]
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: surveyjs/${{ matrix.target.repo }}
-          token: ${{ secrets.LICENSE_SYNC_TOKEN }}
+          token: ${{ secrets.REPOS_ACCESS_TOKEN }}
           path: target
 
       - shell: bash
