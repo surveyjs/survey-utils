@@ -1,7 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import {
-  apiReferenceDir, llmGuideDir, paths, PATHS_FILE, siteDocsDir, siteRoot, themePath, tokenTopicPaths
+  apiReferenceDir, injectTopicPaths, llmGuideDir, paths, PATHS_FILE, siteDocsDir, siteRoot, themePath,
+  tokenTopicPaths
 } from "../src/site-paths";
 import { topicFiles } from "../src/token-tables";
 import { docProductNames } from "../src/doc-products";
@@ -15,7 +16,7 @@ test("paths.json ships at the root of the package, where an install can find it"
 test("every default a command reads is declared, and none of them is absolute", () => {
   const declared = [
     themePath(), apiReferenceDir(), llmGuideDir(),
-    ...tokenTopicPaths(), ...docProductNames.map(siteDocsDir)
+    ...tokenTopicPaths(), ...injectTopicPaths(), ...docProductNames.map(siteDocsDir)
   ];
   declared.forEach((target) => {
     expect(target).toBeTruthy();

@@ -33,6 +33,11 @@ export interface SitePaths {
   docs: { [product: string]: string };
   /** The Markdown topics whose token tables are filled from the theme. At least one. */
   tokenTopics: string[];
+  /**
+   * The Markdown topics whose `@@inject` directives `inject-docs` refreshes when it is named no
+   * topics. At least one. Explicit files, no globs: a new backend topic is one more line.
+   */
+  injectTopics: string[];
   /** Subfolder of `--out` the Markdown API reference is written to. */
   apiReference: string;
   /** Subfolder of `--out` survey-json-authoring.md is written to. */
@@ -99,6 +104,7 @@ export function paths(): Paths {
       repo: requireString(site.repo, "site.repo"),
       docs: requireMap(site.docs, "site.docs"),
       tokenTopics: requireStrings(site.tokenTopics, "site.tokenTopics"),
+      injectTopics: requireStrings(site.injectTopics, "site.injectTopics"),
       apiReference: requireString(site.apiReference, "site.apiReference"),
       llmGuide: requireString(site.llmGuide, "site.llmGuide")
     }
@@ -147,6 +153,11 @@ export function siteDocsDir(product: string): string {
 /** The token-table topics, relative to the content repo root. */
 export function tokenTopicPaths(): string[] {
   return paths().site.tokenTopics;
+}
+
+/** The topics inject-docs refreshes by default, relative to the content repo root. */
+export function injectTopicPaths(): string[] {
+  return paths().site.injectTopics;
 }
 
 /** Where the Markdown API reference goes, relative to the output root. */

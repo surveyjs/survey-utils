@@ -15,8 +15,10 @@ import {
 } from "./doc-products";
 import { runTranslate, TranslateUsageError, translateProducts } from "./translate";
 import { fillTokenTables } from "./token-tables";
+import { InjectDocsOptions, runInjectDocs } from "./inject-docs";
 import {
-  apiReferenceDir, llmGuideDir, paths, PATHS_FILE, siteDocsDir, siteRoot, tokenTopicPaths
+  apiReferenceDir, injectTopicPaths, llmGuideDir, paths, PATHS_FILE, siteDocsDir, siteRoot,
+  tokenTopicPaths
 } from "./site-paths";
 
 /**
@@ -52,6 +54,7 @@ Commands:
   generate-doc [product]    Generate API documentation from a product's TypeScript sources.
   check-strings [product]   Report localization strings no product source reaches any more.
   translate <product>       Translate the localization files of a product.
+  inject-docs [topic...]    Refresh the @@inject sections of the site's Markdown topics.
 
 Each takes a product and finds its folders itself. --path <dir> means the same thing in all of
 them: the root of the product's repo -- the folder that holds its package.json, not a folder
@@ -194,6 +197,35 @@ survey-utils translate <product> [--key <key>] [--path <dir>]
   --path <dir>              Repo root of the product. The product's localization folder is
                             joined onto it (library -> packages/survey-core/src/localization).
 
+survey-utils inject-docs [topic...] [--out <dir>] [--check]
+
+  Some site topics are assembled rather than written: an <!--- @@inject: ... ---> directive
+  pulls in a section of a shared Markdown file (../DocsShared/..., with {@ name @} placeholders
+  set by value=name:...) or a line range of a GitHub permalink, so one shared text and the
+  sample repos' real code stay the source of truth. This fills those sections with
+  inject-markdown. The directives survive the rewrite, each closed by an @@inject-end marker,
+  so re-running is how a topic tracks its sources. It needs the network for the permalinks.
+
+  It is a command of its own, not part of a -site preset: these topics depend on no product
+  build, only on the content repo and the repos it quotes.
+
+  [topic...]                The topics to refresh, resolved against --out the way an entry is
+                            resolved against --path: name them relative to the content repo
+                            root. An absolute path is used as is; one that is not there fails.
+                            Default: 'site.injectTopics' in paths.json
+                            (${injectTopicPaths().join(", ")}); a default topic the checkout
+                            has not got is reported and skipped.
+  --out <dir>               The content repo root, resolved like the -site presets' --out:
+                            against the working directory, defaulting to the
+                            ${paths().site.repo} checkout next to survey-utils.
+  --check                   Process in memory and write nothing; exit 1 if any topic is out of
+                            date. The CI mode.
+
+  A run is all or nothing. Any failure in any topic -- an error, a warning, a heading or a file
+  that is not there, a permalink that answers 404 -- is reported and fails the run (exit 1), and
+  then no topic is written, not even the ones that succeeded. A broken source never overwrites
+  the last good content.
+
 `;
 
 interface DocArgs {
@@ -220,7 +252,7 @@ interface DocArgs {
   check: boolean;
 }
 
-class UsageError extends Error {
+export class UsageError extends Error {
   /**
    * @param selfContained The message already says everything the caller needs, so the usage
    * text is not appended: it would bury the report it is supposed to support.
@@ -454,6 +486,30 @@ function parsePresetArgs(args: string[]): PresetArgs {
       else res.out = next;
     }
     // Everything else is ignored on purpose: the preset decides the emitters.
+  }
+  return res;
+}
+
+/**
+ * inject-docs takes topics, --out and --check, nothing else. Unlike a preset it does not ignore a
+ * stray flag: every topic it is given is a file it may write, so a token it does not understand
+ * is reported rather than guessed at.
+ */
+export function parseInjectDocsArgs(args: string[]): InjectDocsOptions {
+  const res: InjectDocsOptions = { topics: [], check: false };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--out") {
+      const next = args[++i];
+      if (next === undefined || next.indexOf("--") === 0) throw new UsageError(arg + " needs a value");
+      res.out = next;
+    } else if (arg === "--check") {
+      res.check = true;
+    } else if (arg.indexOf("-") === 0) {
+      throw new UsageError("Unknown option: " + arg);
+    } else {
+      res.topics.push(arg);
+    }
   }
   return res;
 }
@@ -692,7 +748,7 @@ function generateDoc(args: DocArgs): number {
   return 0;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const command = argv[0];
   if (!command || command === "help" || command === "--help" || command === "-h") {
@@ -717,6 +773,11 @@ function main(): void {
       if (code !== 0) process.exit(code);
       return;
     }
+    if (command === "inject-docs") {
+      // Awaited before exiting: the permalinks are fetched over the network, and exiting with
+      // the requests in flight would kill them. A rejection lands in the catch below.
+      process.exit(await runInjectDocs(parseInjectDocsArgs(argv.slice(1))));
+    }
     throw new UsageError("Unknown command: " + command);
   } catch (error) {
     // A path that is not there -- a --path, an entry file -- is the caller's mistake, and the
@@ -735,4 +796,5 @@ function main(): void {
   }
 }
 
-main();
+// Only when run as the bin: the tests import the argument parsers from here.
+if (require.main === module) main();

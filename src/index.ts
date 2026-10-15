@@ -15,11 +15,12 @@ export {
   ThemeToken, TokenTable, TokenTablesResult, readThemeTokens, updateTokenTables,
   formatTokenValue, fillTokenTables
 } from "./token-tables";
+export { runInjectDocs, findSilentFailures, InjectDocsOptions, SilentFailure } from "./inject-docs";
 export { setTranslationKey } from "./localization-utils";
 // The relative-path defaults every site command reads, so a consumer that drives the
 // generators directly resolves them the same way the bin does.
 export {
-  Paths, ProductPaths, SitePaths, PATHS_FILE, paths, themePath, tokenTopicPaths,
+  Paths, ProductPaths, SitePaths, PATHS_FILE, paths, themePath, tokenTopicPaths, injectTopicPaths,
   apiReferenceDir, llmGuideDir, siteDocsDir, siteRoot
 } from "./site-paths";
 
