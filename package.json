@@ -20,11 +20,15 @@
   ],
   "author": "SurveyJS Team",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@types/jsdom": "^21.1.7",
     "@types/node": "^24.1.0",
     "ajv": "^8.20.0",
     "dotenv": "^17.4.2",
+    "inject-markdown": "^6.2.0",
     "jsdom": "^26.0.0",
     "json5": "^2.0.0",
     "typescript": "^5.7.0"
@@ -41,6 +45,7 @@
     "check:unused-strings": "node ./dist/cli.js check-strings",
     "translate": "node ./dist/cli.js translate",
     "generate-doc": "node ./dist/cli.js generate-doc",
+    "inject-docs": "node ./dist/cli.js inject-docs",
     "debug": "ts-node src/translateLibrary.ts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"

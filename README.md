@@ -7,10 +7,11 @@ Build tools for SurveyJS repositories. Run them with the `survey-utils` CLI.
 | `translate <product>` | Translate missing locale strings with Azure Translator |
 | `check-strings [product]` | Find unused localization strings |
 | `generate-doc [product or preset]` | Generate API docs, JSON Schema, and an LLM authoring guide |
+| `inject-docs [topic...]` | Refresh `@@inject` sections in site topics |
 
 ## Setup
 
-From this checkout:
+Requires Node.js 22 or later. From this checkout:
 
 ```bash
 npm install
@@ -19,7 +20,7 @@ npm test
 node ./dist/cli.js help
 ```
 
-In this checkout, run the examples with `node ./dist/cli.js` instead of `survey-utils`. You can also pass arguments after `--` to the `translate`, `check:unused-strings`, and `generate-doc` npm scripts:
+In this checkout, run the examples with `node ./dist/cli.js` instead of `survey-utils`. You can also pass arguments after `--` to the `translate`, `check:unused-strings`, `generate-doc`, and `inject-docs` npm scripts:
 
 ```bash
 npm run translate -- creator                        # Translate Creator strings
@@ -46,7 +47,7 @@ To use the CLI in another project's npm scripts, add `survey-utils` as a develop
 - For `generate-doc`, relative `--out`, `--md-out`, `--llm-guide-out`, and `--serializer` paths start at the selected product root. The default output folder is the package's `docs` folder.
 - [`--llm-guide`](#documentation-generation) writes the guide to `llms` under the selected root unless `--llm-guide-out` is set.
 - For [`-site` presets](#build-and-site-presets), `--out` sets the site content repository root, relative to the working directory. The default is the `surveyjs-site-data` checkout beside `survey-utils`.
-- [`paths.json`](paths.json) lists the theme source, site output folders, and design-token topics. [`src/doc-products.ts`](src/doc-products.ts) lists product entry files and package layouts.
+- [`paths.json`](paths.json) lists the theme source, site output folders, design-token topics, and injected topics. [`src/doc-products.ts`](src/doc-products.ts) lists product entry files and package layouts.
 
 ## Translation
 
@@ -201,6 +202,35 @@ Mark each table with a `<div>` whose ID filters token names:
 - Missing topics are reported and skipped.
 - Each run reports row counts and warns about filters with no matches or component tokens missing from all tables.
 
+### Injected Topics
+
+Some site topics are assembled from `@@inject` directives: sections of shared Markdown files in `DocsShared`, and line ranges of GitHub permalinks to sample code. `inject-docs` fills them with [inject-markdown](https://github.com/streetsidesoftware/inject-markdown). It is a separate command and is not part of any `-site` preset.
+
+```markdown
+<!--- @@inject: ../DocsShared/backend-integration-common.md#heading=Save%20Responses --->
+<!--- @@inject: https://github.com/surveyjs/surveyjs-php/blob/<sha>/shared/client/save-response.js#L5-L23 --->
+```
+
+```bash
+# Refresh the topics listed in paths.json
+survey-utils inject-docs --out ../surveyjs-site-data
+
+# Refresh one topic, named relative to the content repository root
+survey-utils inject-docs Docs/backend-integration-php.md --out ../surveyjs-site-data
+
+# CI: write nothing, exit 1 if any topic is out of date or fails
+survey-utils inject-docs --out "$SITE_DATA" --check
+```
+
+**Notes:**
+
+- `--out` sets the content repository root, as for `-site` presets. Topics are resolved against it. An absolute topic path is used as is.
+- Without topics, the command uses `site.injectTopics` in [`paths.json`](paths.json). Missing default topics are reported and skipped. A missing named topic is an error.
+- The command needs network access to fetch GitHub permalinks.
+- Each directive gets an `@@inject-end` marker on the first run. Later runs replace only the content between the markers.
+- A run is all or nothing. An error or warning, a missing file or heading, or a permalink that returns 404 fails the run, and no topic is written.
+- If you change a directive's reference in an expanded topic, change its `@@inject-end` marker to match. Otherwise inject-markdown warns and the run fails.
+
 ## npm Script Examples
 
 Add `survey-utils` to your package's `devDependencies` to use the CLI in npm scripts. `translate` and `check-strings` need `--path` when run this way. `generate-doc` can find the product from the working directory.
@@ -273,6 +303,7 @@ In `survey-pdf/package.json`:
 | [src/loc-lint](src/loc-lint) | Unused-string analysis and product resolvers |
 | [src/translate.ts](src/translate.ts) | Translation command and product paths |
 | [src/token-tables](src/token-tables) | Design-token extraction and table generation |
+| [src/inject-docs](src/inject-docs) | `@@inject` refresh for site topics |
 | [tests](tests) | Test suites and fixtures |
 
 **Notes:**
