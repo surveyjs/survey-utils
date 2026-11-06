@@ -26,7 +26,8 @@
     "$injectTopics-note": "Topics whose @@inject directives inject-docs refreshes when it is given no topics. Relative to --out, like tokenTopics.",
     "injectTopics": [
       "Docs/backend-integration-php.md",
-      "Docs/crm-opportunity-records.md"
+      "Docs/crm-opportunity-records.md",
+      "Docs/feedback.md"
     ],
 
     "$subfolder-note": "Inside a product's docs folder.",
