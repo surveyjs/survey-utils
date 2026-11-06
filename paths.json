@@ -27,7 +27,9 @@
     "injectTopics": [
       "Docs/backend-integration-php.md",
       "Docs/crm-opportunity-records.md",
-      "Docs/feedback.md"
+      "Docs/feedback.md",
+      "Docs/encounter-note.md",
+      "Docs/appointment-request.md"
     ],
 
     "$subfolder-note": "Inside a product's docs folder.",
