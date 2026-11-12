@@ -216,7 +216,7 @@ Some site topics are assembled from `@@inject` directives: sections of shared Ma
 survey-utils inject-docs --out ../surveyjs-site-data
 
 # Refresh one topic, named relative to the content repository root
-survey-utils inject-docs Docs/backend-integration-php.md --out ../surveyjs-site-data
+survey-utils inject-docs Docs/backend-integration-laravel.md --out ../surveyjs-site-data
 
 # CI: write nothing, exit 1 if any topic is out of date or fails
 survey-utils inject-docs --out "$SITE_DATA" --check

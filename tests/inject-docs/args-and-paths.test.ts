@@ -47,7 +47,7 @@ describe("site.injectTopics in paths.json", () => {
 
   test.each([
     ["missing", undefined],
-    ["not an array", "Docs/backend-integration-php.md"],
+    ["not an array", "Docs/backend-integration-laravel.md"],
     ["empty", []]
   ])("%s: reported against site.injectTopics", (_kind, value) => {
     expect(pathsWith(value)).toThrow("'site.injectTopics' must be a non-empty array");

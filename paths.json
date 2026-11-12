@@ -25,7 +25,7 @@
 
     "$injectTopics-note": "Topics whose @@inject directives inject-docs refreshes when it is given no topics. Relative to --out, like tokenTopics.",
     "injectTopics": [
-      "Docs/backend-integration-php.md"
+      "Docs/backend-integration-laravel.md"
     ],
 
     "$subfolder-note": "Inside a product's docs folder.",
