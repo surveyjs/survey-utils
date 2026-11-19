@@ -295,7 +295,8 @@ export class LocalizationUtils {
         commentHash[key] = obj;
       }
       if (!obj.commentTop) {
-        obj.commentTop = "\"" + englishTopComments[key] + "\"";
+        // Escaped like the auto-translated comment below: a raw line break would end the // comment
+        obj.commentTop = JSON.stringify(englishTopComments[key]);
       }
     }
     const json = this.getJson(translationText);
