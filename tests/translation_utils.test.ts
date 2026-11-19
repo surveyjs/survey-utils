@@ -480,6 +480,28 @@ export var loc = {
   maskPlaceholderDay: "T"
 }`);
 });
+test("English source comment escapes line breaks and quotes of a manually translated value", (): any => {
+  const englishJSON = {
+    multiline: "Format:\n\nid|option",
+    quoted: "Value \"{0}\""
+  };
+  const translationText = `
+export var loc = {
+  multiline: "Formatua:\\n\\nid|aukera",
+  quoted: "\\"{0}\\" balioa"
+};`;
+  const utils = new LocalizationUtils();
+  const res = utils.getJsonWithTranslation(translationText, englishJSON, [], []);
+  expect(res).toEqual(`{
+  // "Format:\\n\\nid|option"
+  multiline: "Formatua:\\n\\nid|aukera",
+  // "Value \\"{0}\\""
+  quoted: "\\"{0}\\" balioa"
+}`);
+  // each comment stays on one line and reads back as the English original
+  const comments = utils.readJsonComments("export var loc = " + res + ";");
+  expect(comments.map(c => [c.key, JSON.parse(c.comment)])).toEqual([["multiline", englishJSON.multiline], ["quoted", englishJSON.quoted]]);
+});
 test("Read comments from json with arrays", (): any => {
   const utils = new LocalizationUtils();
   const str1 = `export var loc = {
